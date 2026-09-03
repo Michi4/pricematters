@@ -5,21 +5,27 @@
         <img src="/logo.svg" alt="logo" width="28" height="28" />
         <span>{{ brand.name }}</span>
       </NuxtLink>
-      <nav class="lang">
+      <div class="top-right">
+        <button class="theme-btn" @click="toggleTheme" aria-label="Theme">
+          <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19"/></svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z"/></svg>
+        </button>
+        <nav class="lang">
         <NuxtLink
           v-for="l in (locales as any[])"
           :key="l.code"
           :to="switchLocalePath(l.code)"
           :class="{ active: locale === l.code }"
         >{{ l.code.toUpperCase() }}</NuxtLink>
-      </nav>
+        </nav>
+      </div>
     </header>
 
     <main>
       <section class="hero">
-        <h1>{{ t('hero.headline') }}</h1>
+        <p class="eyebrow">{{ brand.name }}</p>
         <Transition name="fade" mode="out-in">
-          <p class="slogan" :key="sloganIdx">{{ slogans[sloganIdx] }}</p>
+          <h1 :key="sloganIdx">{{ slogans[sloganIdx] }}</h1>
         </Transition>
         <form class="search" @submit.prevent="search">
           <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus />
@@ -46,7 +52,9 @@
           </span>
         </div>
 
-        <div v-if="sorted.length" class="controls">
+        <details v-if="sorted.length" class="filters-wrap">
+          <summary>{{ t('results.filterTitle') }}</summary>
+          <div class="controls">
           <label>{{ t('results.sort.label') }}
             <select v-model="sortKey">
               <option value="unit">{{ t('results.sort.unit') }}</option>
@@ -68,9 +76,6 @@
               :class="{ active: storeFilter === s }" @click="storeFilter = s"
             >{{ s }}</button>
           </div>
-        </div>
-
-        <div v-if="sorted.length" class="controls filters">
           <label>{{ t('results.filter.min') }}
             <input v-model="minPrice" type="number" min="0" step="0.01" placeholder="0.00" />
           </label>
@@ -90,7 +95,8 @@
             <input v-model="onlyUnit" type="checkbox" />
             {{ t('results.filter.onlyUnit') }}
           </label>
-        </div>
+          </div>
+        </details>
 
         <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
@@ -99,6 +105,10 @@
             <span v-if="i === 0 && sortKey === 'unit' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
             <span class="store">{{ r.store || 'Amazon' }}</span>
           </div>
+          <div class="card-main">
+            <img v-if="r.image" :src="r.image" :alt="r.title" loading="lazy" class="thumb" />
+            <div v-else class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
+            <div class="card-body">
           <h2>{{ r.title }}</h2>
           <div class="numbers">
             <span class="price">{{ money(r.priceCents) }}</span>
@@ -106,6 +116,8 @@
             <span v-if="shownUnit(r)" class="unitprice">
               {{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ displayUnit }}
             </span>
+          </div>
+            </div>
           </div>
           <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta">
             {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
@@ -121,11 +133,16 @@
             <span v-if="e.best" class="best-badge">{{ t('results.best') }}</span>
             <span class="store">Amazon</span>
           </div>
+          <div class="card-main">
+            <div class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
+            <div class="card-body">
           <h2>{{ e.t }}</h2>
           <div class="numbers">
             <span class="price">{{ money(e.price) }}</span>
             <span class="qty">{{ e.qty }}</span>
             <span class="unitprice">{{ moneyBare(e.per) }} {{ sym }} / {{ e.base }}</span>
+          </div>
+            </div>
           </div>
         </article>
         <h2>{{ t('how.title') }}</h2>
@@ -168,9 +185,29 @@ const brand = computed(() => {
 const slogans = computed<string[]>(() =>
   brand.value[locale.value === 'de' ? 'slogansDE' : 'slogansEN'] || brand.value.slogansEN || []);
 const sloganIdx = ref(0);
+const theme = ref('light');
 let timer: ReturnType<typeof setInterval> | null = null;
+function applyTheme(t: string) {
+  theme.value = t;
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('pm_theme', t); } catch { /* private mode */ }
+}
+function toggleTheme() {
+  applyTheme(theme.value === 'dark' ? 'light' : 'dark');
+}
+async function loadPopular() {
+  try {
+    const data = await $fetch('/api/popular', { query: { marketplace: marketplace.value } }) as any;
+    if (data?.items?.length) popularApi.value = data.items;
+  } catch { /* static fallback stays */ }
+}
 onMounted(() => {
   timer = setInterval(() => { sloganIdx.value = (sloganIdx.value + 1) % Math.max(slogans.value.length, 1); }, 5000);
+  try {
+    const saved = localStorage.getItem('pm_theme');
+    applyTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  } catch { applyTheme('light'); }
+  loadPopular();
   if (route.query.q) { q.value = String(route.query.q); search(); }
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
@@ -189,9 +226,10 @@ const maxPrice = ref('');
 const kindFilter = ref('all');
 const onlyUnit = ref(true);
 
-const popular = computed(() => locale.value === 'de'
+const popularApi = ref<string[]>([]);
+const popular = computed(() => popularApi.value.length ? popularApi.value : (locale.value === 'de'
   ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
-  : ['Rice', 'Coffee', 'Protein', 'Peanut butter']);
+  : ['Rice', 'Coffee', 'Protein', 'Peanut butter']));
 const examples = computed(() => tm('example.items') as any[]);
 
 const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com: '$', 'co.uk': '£' };
@@ -209,6 +247,7 @@ async function search() {
     meta.value = (data as any).meta || {};
     searched.value = true;
     storeFilter.value = 'all';
+    loadPopular();
     // sensible default display unit from result kinds
     const bases = new Set(results.value.map((r: any) => r.unitPrice?.base));
     displayUnit.value = bases.has('kg') ? 'kg' : bases.has('l') ? 'l' : bases.has('pcs') ? 'pcs' : 'kg';
@@ -288,41 +327,54 @@ useHead({
 </script>
 
 <style>
-:root { --green: #16a34a; --green-d: #15803d; --ink: #1a2e1f; --mut: #5b6b5e; --bg: #f6faf7; --card: #fff; }
+:root { --green: #16a34a; --green-d: #15803d; --ink: #1a2e1f; --mut: #5b6b5e; --bg: #f6faf7; --card: #fff; --line: #e3ece4; --input-line: #d5e2d7; color-scheme: light; }
+[data-theme="dark"] { --ink: #e9f1ea; --mut: #9db0a1; --bg: #0d140f; --card: #141d17; --line: #26332b; --input-line: #31402f; color-scheme: dark; }
+[data-theme="dark"] .unitprice, [data-theme="dark"] .popular button { color: #4ade80; }
+[data-theme="dark"] .demo { background: #453304; color: #fcd34d; }
+[data-theme="dark"] .store { background: #223028; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 .page { font-family: system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
-.top { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.4rem; background: var(--card); border-bottom: 1px solid #e3ece4; }
+.top { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.4rem; background: var(--card); border-bottom: 1px solid var(--line); }
 .logo { display: flex; gap: 0.5rem; align-items: center; font-weight: 800; font-size: 1.15rem; color: var(--ink); text-decoration: none; }
-.lang { display: flex; gap: 0.25rem; }
+.top-right { display: flex; align-items: center; gap: 0.5rem; }
+.theme-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; cursor: pointer; }
+.theme-btn svg { width: 1.1rem; height: 1.1rem; }
+.theme-btn:hover { border-color: var(--green); color: var(--green-d); }
 .lang a { text-decoration: none; color: var(--mut); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
 main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; }
 .hero { text-align: center; padding: 3rem 0 1.5rem; }
-.hero h1 { font-size: 2.6rem; margin: 0; letter-spacing: -0.02em; }
-.slogan { font-size: 1.15rem; color: var(--mut); min-height: 2.8em; display: flex; align-items: center; justify-content: center; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; font-weight: 800; color: var(--green-d); margin: 0 0 0.6rem; }
+.hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 .search { display: flex; gap: 0.5rem; max-width: 640px; margin: 0 auto; }
-.search input { flex: 1; padding: 0.85rem 1rem; font-size: 1.05rem; border: 2px solid #d5e2d7; border-radius: 12px; }
+.search input { flex: 1; padding: 0.85rem 1rem; font-size: 1.05rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
 .search input:focus { outline: none; border-color: var(--green); }
-.search select, .controls select { padding: 0.85rem 0.6rem; border: 2px solid #d5e2d7; border-radius: 12px; background: #fff; }
+.search select, .controls select { padding: 0.85rem 0.6rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
 .search button { padding: 0.85rem 1.6rem; font-size: 1.05rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 12px; cursor: pointer; }
 .search button:hover { background: var(--green-d); }
 .popular { color: var(--mut); font-size: 0.9rem; }
-.popular button { background: none; border: 1px solid #cfdccf; border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
+.popular button { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
 .meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; }
 .demo { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; }
-.controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid #e3ece4; margin-bottom: 1rem; font-size: 0.92rem; }
+.controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 1rem; font-size: 0.92rem; }
 .controls label { display: flex; gap: 0.4rem; align-items: center; }
 .controls select { padding: 0.4rem 0.5rem; border-radius: 8px; }
-.controls input[type="number"] { width: 6rem; padding: 0.4rem 0.5rem; border: 2px solid #d5e2d7; border-radius: 8px; }
+.controls input[type="number"] { width: 6rem; padding: 0.4rem 0.5rem; border: 2px solid var(--input-line); border-radius: 8px; background: var(--card); color: var(--ink); }
 .controls .check { display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
-.filters { background: #f0f6f1; }
-.stores button { border: 1px solid #cfdccf; background: #fff; border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
+.filters-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 1rem; font-size: 0.92rem; }
+.filters-wrap summary { cursor: pointer; padding: 0.7rem 1rem; font-weight: 700; color: var(--mut); list-style-position: inside; }
+.filters-wrap .controls { border: none; margin-bottom: 0; }
+.card-main { display: flex; gap: 1rem; align-items: flex-start; }
+.thumb { width: 84px; height: 84px; min-width: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+.thumb.placeholder { display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.card-body { flex: 1; min-width: 0; }
+.stores button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
 .stores button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 .empty { text-align: center; color: var(--mut); padding: 2rem; }
-.card { background: var(--card); border: 1px solid #e3ece4; border-radius: 14px; padding: 1.1rem 1.2rem; margin-bottom: 0.8rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; margin-bottom: 0.8rem; }
 .card.best { border: 2px solid var(--green); }
 .card-top { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; }
 .best-badge { background: var(--green); color: #fff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 20px; text-transform: uppercase; }
@@ -337,9 +389,9 @@ main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3
 .marketing { text-align: center; padding: 1rem 0; }
 .mut { color: var(--mut); }
 .steps, .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-.steps div, .trust div { background: var(--card); border: 1px solid #e3ece4; border-radius: 12px; padding: 1rem; }
+.steps div, .trust div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
 .steps p, .trust p { color: var(--mut); font-size: 0.92rem; }
-footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid #e3ece4; background: var(--card); }
+footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid var(--line); background: var(--card); }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
 @media (max-width: 600px) { .hero h1 { font-size: 2rem; } .search { flex-direction: column; } }
 </style>

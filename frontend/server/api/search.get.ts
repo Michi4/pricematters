@@ -16,7 +16,10 @@ export default defineEventHandler(async (event) => {
     return {
       items: (backend.items || []).map((it: any) => ({
         ...it,
-        url: `${it.url}${it.url.includes('?') ? '&' : '?'}tag=${tag}`,
+        // backend already tags Amazon/Awin links; only add ours if missing
+        url: /[?&]tag=/.test(it.url) || !it.url.includes('amazon.')
+          ? it.url
+          : `${it.url}${it.url.includes('?') ? '&' : '?'}tag=${tag}`,
       })),
       meta: backend.meta || {},
     };

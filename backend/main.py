@@ -17,8 +17,24 @@ app = FastAPI(title="PriceMatters API")
 DEFAULT_TAG = "websters02-21"
 
 
-def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, marketplace: str) -> dict:
-    q = extract_quantity(title)
+def log_search(query: str, marketplace: str, count: int):
+    """Fire-and-forget: feeds the 'Popular' row. No DB -> silently skipped."""
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO searches (query, marketplace, result_count) VALUES (%s,%s,%s)",
+                (query[:120], marketplace, count),
+            )
+    except Exception:
+        pass
+
+def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, image: str | None, marketplace: str) -> dict:
+    from ai_extract import ai_quantity
+    q = extract_quantity(title) or ai_quantity(title)
     up = unit_price(price_cents, q) if q else None
     return {
         "asin": pid,
@@ -26,6 +42,7 @@ def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, marketpl
         "priceCents": price_cents,
         "url": monetize(url, shop, marketplace, os.getenv("AMAZON_PARTNER_TAG", DEFAULT_TAG)),
         "store": shop,
+        "image": image,
         "qty": {"value": q.value, "unit": q.unit, "kind": q.kind} if q else None,
         "unitPrice": {"per": up[0], "base": up[1]} if up else None,
     }
@@ -79,4 +96,25 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
             meta["feed_shops"] = str(e)
 
     items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
+    log_search(q, marketplace, len(items))
     return {"items": items, "meta": meta}
+
+
+@app.get("/popular")
+def popular(marketplace: str = Query("de"), limit: int = Query(4)):
+    """Top user queries, last 30 days. [] -> frontend falls back to static hints."""
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return {"items": []}
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute(
+                """SELECT query, COUNT(*) AS c FROM searches
+                   WHERE marketplace = %s AND created_at > now() - interval '30 days'
+                   GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
+                (marketplace, limit),
+            )
+            return {"items": [r[0] for r in cur.fetchall()]}
+    except Exception:
+        return {"items": []}

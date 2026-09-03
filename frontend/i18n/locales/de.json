@@ -1,7 +1,6 @@
 {
   "header": { "tagline": "Der ehrliche Preisvergleich" },
   "hero": {
-    "headline": "Zahle pro Einheit, nicht pro Packung.",
     "searchPlaceholder": "Reis, Kaffee, Protein, Erdnussmus …",
     "searchButton": "Vergleichen",
     "searching": "Suche …",
@@ -33,6 +32,7 @@
       "name": "Name A–Z"
     },
     "unit": { "label": "Anzeigen als" },
+    "filterTitle": "Filter & Anzeige",
     "filter": {
       "min": "Min-Preis",
       "max": "Max-Preis",

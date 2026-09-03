@@ -10,7 +10,7 @@ services:
       # the NITRO_/NUXT_ prefixes (read per request, no rebuild needed).
       NITRO_BACKEND_URL: http://backend:8000
       NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE:-de-AT}
-      NUXT_PUBLIC_AFFILIATE_TAG: ${NUXT_PUBLIC_AFFILIATE_TAG:-websters0a-21}
+      NUXT_PUBLIC_AFFILIATE_TAG: ${NUXT_PUBLIC_AFFILIATE_TAG:-websters02-21}
       NUXT_PUBLIC_CANONICAL_HOST: ${NUXT_PUBLIC_CANONICAL_HOST:-pricematters.websters.at}
       BACKEND_URL: http://backend:8000
     depends_on:

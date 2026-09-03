@@ -1,7 +1,6 @@
 {
   "header": { "tagline": "The honest price comparison" },
   "hero": {
-    "headline": "Pay per unit, not per package.",
     "searchPlaceholder": "Rice, coffee, protein, peanut butter …",
     "searchButton": "Compare",
     "searching": "Searching …",
@@ -33,6 +32,7 @@
       "name": "Name A–Z"
     },
     "unit": { "label": "Show as" },
+    "filterTitle": "Filters & display",
     "filter": {
       "min": "Min price",
       "max": "Max price",
