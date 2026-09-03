@@ -61,6 +61,11 @@
           <span v-if="meta.queries?.length > 1" class="also">
             {{ t('results.alsoSearched') }} {{ meta.queries.slice(1).join(', ') }}
           </span>
+          <span v-if="meta.zone" class="zone">{{ t('results.zone', { zone: meta.zone }) }}</span>
+          <span v-if="shipHint" class="ship">
+            {{ t('results.shipNote') }}
+            <button class="linklike" @click="marketplace = 'de'; saveMarket(); search()">{{ t('results.shipSwitch') }}</button>
+          </span>
         </div>
 
         <div v-if="sorted.length" class="controls">
@@ -111,10 +116,10 @@
 
         <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
-        <template v-for="(r, i) in sorted" :key="r.asin">
-        <article class="card" :class="{ best: i === 0 && sortKey === 'unit' && shownUnit(r) }">
+        <template v-for="(r, i) in paged" :key="r.asin">
+        <article class="card" :class="{ best: i === 0 && page === 1 && sortKey === 'unit' && shownUnit(r) }">
           <div class="card-top">
-            <span v-if="i === 0 && sortKey === 'unit' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
+            <span v-if="i === 0 && page === 1 && sortKey === 'unit' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
             <span class="store">{{ r.store || 'Amazon' }}</span>
           </div>
           <div class="card-main">
@@ -124,7 +129,7 @@
           <h2>{{ r.title }}</h2>
           <div class="numbers">
             <span class="price">{{ money(r.priceCents) }}</span>
-            <span v-if="r.qty" class="qty">{{ r.qty.value }} {{ r.qty.unit }}</span>
+            <span v-if="r.qty" class="qty">{{ fmtQty(r.qty.value) }} {{ r.qty.unit }}</span>
             <span v-if="shownUnit(r)" class="unitprice">
               {{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ displayUnit }}
             </span>
@@ -140,6 +145,20 @@
           <p>{{ t('ads.infeed') }} <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a></p>
         </div>
         </template>
+
+        <div v-if="totalPages > 1" class="pager">
+          <button :disabled="page <= 1" @click="page--">‹</button>
+          <span>{{ t('results.pageOf', { p: page, n: totalPages }) }}</span>
+          <button :disabled="page >= totalPages" @click="page++">›</button>
+          <label>{{ t('results.perPage') }}
+            <select v-model.number="perPage">
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+          </label>
+        </div>
       </section>
 
     </main>
@@ -231,6 +250,7 @@ onMounted(() => {
   } catch { applyTheme('light'); }
   loadPopular();
   marketplace.value = guessMarketplace();
+  try { userTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* ignore */ }
   if (route.query.q) { q.value = String(route.query.q); search(); }
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
@@ -249,6 +269,11 @@ function guessMarketplace(): string {
     if (['de', 'at', 'com', 'co.uk', 'fr'].includes(forced)) return forced;
     const saved = readCookie('pm_market');
     if (['de', 'at', 'com', 'co.uk', 'fr'].includes(saved)) return saved;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (/^Europe\/(Vienna|Berlin|Zurich|Luxembourg)$/i.test(tz)) return /vienna/i.test(tz) ? 'at' : 'de';
+    if (/^Europe\/(Paris|Brussels|Amsterdam|Madrid|Rome|Lisbon|Warsaw)$/i.test(tz)) return /paris/i.test(tz) ? 'fr' : 'de';
+    if (/^Europe\/London$/i.test(tz)) return 'co.uk';
+    if (/^America\//i.test(tz)) return 'com';
     const l = navigator.language || '';
     if (/^de-AT/i.test(l)) return 'at';
     if (/^de/i.test(l)) return 'de';
@@ -272,6 +297,14 @@ const minPrice = ref('');
 const maxPrice = ref('');
 const kindFilter = ref('all');
 const onlyUnit = ref(true);
+const page = ref(1);
+const perPage = ref(25);
+const userTz = ref('');
+const shipHint = computed(() => {
+  if (!['com', 'co.uk', 'fr'].includes(marketplace.value)) return false;
+  try { return /^Europe\//i.test(userTz.value || Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
+  catch { return false; }
+});
 const adName = ref('');
 const adEmail = ref('');
 const adMsg = ref('');
@@ -306,6 +339,8 @@ const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com:
 const sym = computed(() => CURRENCY[marketplace.value] || '€');
 const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
 const moneyBare = (cents: number) => (cents / 100).toFixed(2);
+// quantities: max 2 decimals, no float artifacts (2721.551999999997 -> 2721.55)
+const fmtQty = (v: number) => String(parseFloat(Number(v).toFixed(2)));
 
 async function search() {
   if (!q.value.trim()) return;
@@ -317,6 +352,7 @@ async function search() {
     meta.value = (data as any).meta || {};
     searched.value = true;
     storeFilter.value = 'all';
+    page.value = 1;
     loadPopular();
     // sensible default display unit from result kinds
     const bases = new Set(results.value.map((r: any) => r.unitPrice?.base));
@@ -357,6 +393,10 @@ const sorted = computed(() => {
   }[sortKey.value] as (a: any, b: any) => number;
   return [...arr].sort(by);
 });
+
+const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)));
+const paged = computed(() => sorted.value.slice((page.value - 1) * perPage.value, page.value * perPage.value));
+watch([sortKey, storeFilter, kindFilter, minPrice, maxPrice, onlyUnit, displayUnit, perPage], () => { page.value = 1; });
 
 // ---- SEO (SSR, per brand + locale) ----
 const url = useRequestURL();
@@ -471,6 +511,14 @@ body { margin: 0; }
 .card-body { flex: 1; min-width: 0; }
 .stores button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
 .stores button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.pager { display: flex; gap: 0.8rem; align-items: center; justify-content: center; margin: 1.2rem 0; color: var(--mut); font-size: 0.92rem; }
+.pager button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 9px; padding: 0.35rem 0.9rem; font-size: 1rem; cursor: pointer; }
+.pager button:disabled { opacity: 0.35; cursor: default; }
+.pager label { display: flex; gap: 0.4rem; align-items: center; }
+.pager select { padding: 0.35rem 0.5rem; border-radius: 8px; border: 2px solid var(--input-line); background: var(--card); color: var(--ink); }
+.zone, .also { font-size: 0.85rem; }
+.ship { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
+[data-theme="dark"] .ship { background: #453304; color: #fcd34d; }
 .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
 .segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
 .segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }

@@ -16,6 +16,8 @@ from translate import query_variants
 
 app = FastAPI(title="PriceMatters API")
 DEFAULT_TAG = "websters02-21"
+# bump to invalidate all cached rows (e.g. after provider param changes like delivery zones)
+CACHE_VERSION = "v2"
 
 
 def log_search(query: str, marketplace: str, count: int):
@@ -74,6 +76,11 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
         return {"items": [], "meta": {"chain": chain}, "error": "no known provider in chain"}
     meta: dict = {"chain": chain, "feed_shops": "skipped",
                   "demo": chain == ["mock"], "queries": [q]}
+    try:
+        from providers import ZONES
+        meta["zone"] = ZONES.get(marketplace, "")
+    except ImportError:
+        pass
     name = chain[0]
     from cache import get as cache_get, store as cache_store
     from providers import DEFAULT_CHAIN  # noqa (keeps default order documented)
@@ -83,7 +90,7 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
     used = "mock"
     rows: list = []
     for cand in chain:
-        ckey = f"{cand}:{marketplace}:{q}"
+        ckey = f"{CACHE_VERSION}:{cand}:{marketplace}:{q}"
         cached = cache_get(ckey) if cand != "mock" else None
         if cached:
             rows, age, hits = cached

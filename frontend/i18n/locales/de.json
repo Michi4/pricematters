@@ -16,6 +16,11 @@
   },
   "results": {
     "count": "{n} Produkte",
+    "zone": "Preise für {zone}",
+    "shipNote": "Manches ist in deiner Region evtl. nicht lieferbar.",
+    "shipSwitch": "Zu amazon.de wechseln",
+    "pageOf": "Seite {p} von {n}",
+    "perPage": "pro Seite",
     "alsoSearched": "Auch gesucht:",
     "demo": "Demo-Daten – echte Live-Preise kommen, sobald ein Daten-Key hinterlegt ist.",
     "empty": "Nichts gefunden. Versuch es mit einem anderen Begriff – z. B. auf Englisch.",

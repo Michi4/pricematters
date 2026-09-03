@@ -115,9 +115,15 @@ def serpapi_search(query: str, marketplace: str):
               "co.uk": "amazon.co.uk", "fr": "amazon.fr"}.get(marketplace, "amazon.de")
     lang = {"amazon.de": "de_DE", "amazon.com": "en_US",
             "amazon.co.uk": "en_GB", "amazon.fr": "fr_FR"}.get(domain, "de_DE")
+    # delivery zone per marketplace: prices AND shippability depend on it
+    zone_zip = {"de": "10115", "at": "1010", "com": "90210",
+                "co.uk": "SW1A 1AA", "fr": "75001"}.get(marketplace, "10115")
+    zone_country = {"de": "DE", "at": "AT", "com": "US",
+                    "co.uk": "GB", "fr": "FR"}.get(marketplace, "DE")
     data = _get("https://serpapi.com/search.json", {
         "api_key": key, "engine": "amazon", "k": query,
         "amazon_domain": domain, "language": lang,
+        "delivery_zip": zone_zip, "shipping_location": zone_country,
     })
     if data.get("error"):
         raise RuntimeError(f"serpapi: {data['error']}")
@@ -191,6 +197,10 @@ PROVIDERS = {
     "selfscrape": selfscrape_search,
     "creators": creators_search,
 }
+
+# delivery zone labels shown in the UI (prices depend on the region!)
+ZONES = {"de": "10115 Berlin", "at": "1010 Wien", "com": "90210 Beverly Hills",
+         "co.uk": "SW1A 1AA London", "fr": "75001 Paris"}
 
 # cheapest-first default chain (free tiers before paid before experimental)
 DEFAULT_CHAIN = ["zenrows", "serpapi", "scrapingbee", "rainforest", "selfscrape", "mock"]
