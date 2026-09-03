@@ -17,18 +17,18 @@
 
     <main>
       <section class="hero">
-        <h1>{{ brand.name }}</h1>
+        <h1>{{ t('hero.headline') }}</h1>
         <Transition name="fade" mode="out-in">
           <p class="slogan" :key="sloganIdx">{{ slogans[sloganIdx] }}</p>
         </Transition>
         <form class="search" @submit.prevent="search">
           <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus />
           <select v-model="marketplace" :title="t('hero.marketplace')">
-            <option value="de">amazon.de</option>
-            <option value="at">at · amazon.de</option>
-            <option value="com">amazon.com</option>
-            <option value="co.uk">amazon.co.uk</option>
-            <option value="fr">amazon.fr</option>
+            <option value="de">{{ t('hero.markets.de') }}</option>
+            <option value="at">{{ t('hero.markets.at') }}</option>
+            <option value="com">{{ t('hero.markets.com') }}</option>
+            <option value="co.uk">{{ t('hero.markets.couk') }}</option>
+            <option value="fr">{{ t('hero.markets.fr') }}</option>
           </select>
           <button type="submit">{{ pending ? t('hero.searching') : t('hero.searchButton') }}</button>
         </form>
@@ -104,7 +104,7 @@
             <span class="price">{{ money(r.priceCents) }}</span>
             <span v-if="r.qty" class="qty">{{ r.qty.value }} {{ r.qty.unit }}</span>
             <span v-if="shownUnit(r)" class="unitprice">
-              {{ money(shownUnit(r)) }} € / {{ displayUnit }}
+              {{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ displayUnit }}
             </span>
           </div>
           <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta">
@@ -114,10 +114,6 @@
       </section>
 
       <section v-if="!searched" class="marketing">
-        <h2>{{ t('cats.title') }}</h2>
-        <div class="tiles">
-          <button v-for="c in cats" :key="c.label" class="tile" @click="browse(c.q)">{{ c.label }}</button>
-        </div>
         <h2>{{ t('example.title') }}</h2>
         <p class="mut">{{ t('example.note') }}</p>
         <article v-for="e in examples" :key="e.t" class="card" :class="{ best: e.best }">
@@ -129,7 +125,7 @@
           <div class="numbers">
             <span class="price">{{ money(e.price) }}</span>
             <span class="qty">{{ e.qty }}</span>
-            <span class="unitprice">{{ money(e.per) }} € / {{ e.base }}</span>
+            <span class="unitprice">{{ moneyBare(e.per) }} {{ sym }} / {{ e.base }}</span>
           </div>
         </article>
         <h2>{{ t('how.title') }}</h2>
@@ -196,16 +192,12 @@ const onlyUnit = ref(true);
 const popular = computed(() => locale.value === 'de'
   ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
   : ['Rice', 'Coffee', 'Protein', 'Peanut butter']);
-const cats = computed(() => tm('cats.items') as any[]);
 const examples = computed(() => tm('example.items') as any[]);
 
-function browse(term: string) {
-  q.value = term;
-  search();
-}
-
 const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com: '$', 'co.uk': '£' };
-const money = (cents: number) => `${(cents / 100).toFixed(2)} ${CURRENCY[marketplace.value] || '€'}`;
+const sym = computed(() => CURRENCY[marketplace.value] || '€');
+const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
+const moneyBare = (cents: number) => (cents / 100).toFixed(2);
 
 async function search() {
   if (!q.value.trim()) return;
@@ -302,7 +294,8 @@ body { margin: 0; }
 .page { font-family: system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
 .top { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.4rem; background: var(--card); border-bottom: 1px solid #e3ece4; }
 .logo { display: flex; gap: 0.5rem; align-items: center; font-weight: 800; font-size: 1.15rem; color: var(--ink); text-decoration: none; }
-.lang a { margin-left: 0.4rem; text-decoration: none; color: var(--mut); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
+.lang { display: flex; gap: 0.25rem; }
+.lang a { text-decoration: none; color: var(--mut); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
 main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; }
 .hero { text-align: center; padding: 3rem 0 1.5rem; }
@@ -342,9 +335,6 @@ main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
 .marketing { text-align: center; padding: 1rem 0; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin: 1rem 0 2rem; }
-.tile { background: var(--card); border: 1px solid #e3ece4; border-radius: 12px; padding: 0.9rem 0.5rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; color: var(--ink); }
-.tile:hover { border-color: var(--green); color: var(--green-d); transform: translateY(-1px); }
 .mut { color: var(--mut); }
 .steps, .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
 .steps div, .trust div { background: var(--card); border: 1px solid #e3ece4; border-radius: 12px; padding: 1rem; }

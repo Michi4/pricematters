@@ -1,11 +1,19 @@
 {
   "header": { "tagline": "The honest price comparison" },
   "hero": {
+    "headline": "Pay per unit, not per package.",
     "searchPlaceholder": "Rice, coffee, protein, peanut butter …",
     "searchButton": "Compare",
     "searching": "Searching …",
     "popular": "Popular:",
-    "marketplace": "Store region"
+    "marketplace": "Store region",
+    "markets": {
+      "de": "Germany · amazon.de",
+      "at": "Austria · amazon.de",
+      "com": "USA · amazon.com",
+      "couk": "United Kingdom · amazon.co.uk",
+      "fr": "France · amazon.fr"
+    }
   },
   "results": {
     "count": "{n} products",
@@ -34,20 +42,9 @@
     },
     "store": { "all": "All", "label": "Shops" }
   },
-  "cats": {
-    "title": "Or browse by category",
-    "items": [
-      { "label": "☕ Coffee & Tea", "q": "Coffee" },
-      { "label": "🍚 Rice & Grains", "q": "Rice" },
-      { "label": "💪 Protein & Fitness", "q": "Protein" },
-      { "label": "🥜 Peanut butter", "q": "Peanut butter" },
-      { "label": "🧴 Drugstore", "q": "Shampoo" },
-      { "label": "💾 SSD & Storage", "q": "SSD 1TB" }
-    ]
-  },
   "example": {
     "title": "What a comparison looks like",
-    "note": "Example – real unit-price math, no moon prices.",
+    "note": "Example – real unit-price math, no inflated prices.",
     "items": [
       { "t": "Organic Basmati Rice, 2 x 1kg", "price": 1299, "qty": "2 kg", "per": 650, "base": "kg", "best": true },
       { "t": "Premium Long-Grain Rice, 500g", "price": 499, "qty": "500 g", "per": 998, "base": "kg", "best": false },
@@ -67,7 +64,7 @@
     "t1": "No ads",
     "d1": "Results are never bought.",
     "t2": "Real unit prices",
-    "d2": "€/kg instead of moon prices.",
+    "d2": "True per-unit values, no inflated discounts.",
     "t3": "Free",
     "d3": "Forever, no account needed."
   },

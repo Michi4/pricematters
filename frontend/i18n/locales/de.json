@@ -1,11 +1,19 @@
 {
   "header": { "tagline": "Der ehrliche Preisvergleich" },
   "hero": {
+    "headline": "Zahle pro Einheit, nicht pro Packung.",
     "searchPlaceholder": "Reis, Kaffee, Protein, Erdnussmus …",
     "searchButton": "Vergleichen",
     "searching": "Suche …",
     "popular": "Beliebt:",
-    "marketplace": "Shop-Region"
+    "marketplace": "Shop-Region",
+    "markets": {
+      "de": "Deutschland · amazon.de",
+      "at": "Österreich · amazon.de",
+      "com": "USA · amazon.com",
+      "couk": "Großbritannien · amazon.co.uk",
+      "fr": "Frankreich · amazon.fr"
+    }
   },
   "results": {
     "count": "{n} Produkte",
@@ -33,17 +41,6 @@
       "kinds": { "all": "Alles", "mass": "Gewicht", "volume": "Volumen", "count": "Stück", "storage": "Speicher" }
     },
     "store": { "all": "Alle", "label": "Shops" }
-  },
-  "cats": {
-    "title": "Oder stöber nach Kategorie",
-    "items": [
-      { "label": "☕ Kaffee & Tee", "q": "Kaffee" },
-      { "label": "🍚 Reis & Getreide", "q": "Reis" },
-      { "label": "💪 Protein & Fitness", "q": "Protein" },
-      { "label": "🥜 Erdnussmus", "q": "Erdnussmus" },
-      { "label": "🧴 Drogerie", "q": "Shampoo" },
-      { "label": "💾 SSD & Speicher", "q": "SSD 1TB" }
-    ]
   },
   "example": {
     "title": "So sieht ein Vergleich aus",
