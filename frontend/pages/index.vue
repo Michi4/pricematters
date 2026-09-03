@@ -29,17 +29,21 @@
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
 const locale = config.public.defaultLocale as string;
-const host = ref('');
-onMounted(() => { host.value = window.location.hostname; });
+const host = useRequestURL().host;
 const brand = computed(() => {
   const brands = appConfig.brands as Record<string, any>;
-  return brands[host.value] || brands.default;
+  const aliases = (appConfig.aliases as Record<string, string>) || {};
+  const key = aliases[host] || host;
+  return brands[key] || brands.default;
 });
 const q = ref('');
 const results = ref<any[]>([]);
 const pending = ref(false);
 // SEO: SSR-rendered per-brand tags (useRequestURL works on server + client)
+// Canonical + og:url always point at the MAIN domain (alias domains stay
+// usable for campaigns but don't split SEO juice / duplicate content).
 const url = useRequestURL();
+const canonical = computed(() => `https://${config.public.canonicalHost}${url.pathname}`);
 const pageTitle = computed(() => `${brand.value?.name || 'PriceMatters'} – Grundpreise vergleichen (€/kg, €/l, €/Stück)`);
 const pageDesc = computed(() => locale.startsWith('de') ? brand.value?.sloganDE : brand.value?.sloganEN);
 useSeoMeta({
@@ -47,24 +51,24 @@ useSeoMeta({
   description: () => pageDesc.value,
   ogTitle: () => pageTitle.value,
   ogDescription: () => pageDesc.value,
-  ogUrl: () => url.href,
-  ogImage: () => `${url.origin}/og.png`,
+  ogUrl: () => canonical.value,
+  ogImage: () => `https://${config.public.canonicalHost}/og.png`,
   twitterTitle: () => pageTitle.value,
   twitterDescription: () => pageDesc.value,
-  twitterImage: () => `${url.origin}/og.png`,
+  twitterImage: () => `https://${config.public.canonicalHost}/og.png`,
 });
 useHead({
-  link: [{ rel: 'canonical', href: () => url.href }],
+  link: [{ rel: 'canonical', href: () => canonical.value }],
   script: [{
     type: 'application/ld+json',
     children: () => JSON.stringify({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: brand.value?.name || 'PriceMatters',
-      url: url.origin,
+      url: canonical.value,
       potentialAction: {
         '@type': 'SearchAction',
-        target: `${url.origin}/?q={query}`,
+        target: `${canonical.value}?q={query}`,
         'query-input': 'required name=query',
       },
     }),

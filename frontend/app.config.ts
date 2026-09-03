@@ -23,4 +23,13 @@ export default defineAppConfig({
       sloganDE: 'Schau nicht auf den Preis – schau auf den Grundpreis.',
     },
   },
+  // hostname -> brand key (prod subdomains + bare .app domains, one image)
+  aliases: {
+    'pricematters.websters.at': 'pricematters.app',
+    'deals.websters.at': 'pricematters.app',
+    'preiswertist.websters.at': 'pricematters.app',
+    'dothemath.websters.at': 'dothemath.app',
+    'moneysworth.websters.at': 'moneysworth.app',
+    'valueformoney.websters.at': 'moneysworth.app',
+  },
 });
