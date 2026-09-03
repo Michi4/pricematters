@@ -1,37 +1,28 @@
-"""FastAPI backend: /search + /extract.
+"""FastAPI backend: /search + /extract + /health.
 
-DATA_PROVIDER=mock      -> works today, no keys, deterministic (UI dev)
-DATA_PROVIDER=rainforest -> needs RAINFOREST_API_KEY (start here for real data)
-DATA_PROVIDER=scrapingbee -> needs SCRAPINGBEE_API_KEY
-DATA_PROVIDER=creators   -> Amazon Creators API (PA-API 5 successor, needs approval + sales)
+Amazon data: DATA_PROVIDER=mock (default, no keys) | scrapingbee | rainforest | creators
+Whole web:   + serpapapi via providers=serpapi, or stores=all fan-out
+Feed shops:  Awin & co via nightly CSV import (feeds.py) into Postgres,
+             searched locally and merged when stores=all (default).
 """
 import os
 from fastapi import FastAPI, Query
-from pydantic import BaseModel
+from affiliate import monetize
 from extractor import extract_quantity, unit_price
+from providers import PROVIDERS
 
 app = FastAPI(title="PriceMatters API")
-PROVIDER = os.getenv("DATA_PROVIDER", "mock")
-TAG = os.getenv("AMAZON_PARTNER_TAG", "websters0a-21")
 
 
-class Item(BaseModel):
-    asin: str
-    title: str
-    priceCents: int
-    url: str
-    qty: dict | None = None
-    unitPrice: dict | None = None
-
-
-def enrich(asin: str, title: str, price_cents: int, url: str) -> dict:
+def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, marketplace: str) -> dict:
     q = extract_quantity(title)
     up = unit_price(price_cents, q) if q else None
     return {
-        "asin": asin,
+        "asin": pid,
         "title": title,
         "priceCents": price_cents,
-        "url": url,
+        "url": monetize(url, shop, marketplace, os.getenv("AMAZON_PARTNER_TAG", "websters0a-21")),
+        "store": shop,
         "qty": {"value": q.value, "unit": q.unit, "kind": q.kind} if q else None,
         "unitPrice": {"per": up[0], "base": up[1]} if up else None,
     }
@@ -39,7 +30,7 @@ def enrich(asin: str, title: str, price_cents: int, url: str) -> dict:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "provider": PROVIDER}
+    return {"ok": True, "provider": os.getenv("DATA_PROVIDER", "mock")}
 
 
 @app.get("/extract")
@@ -49,13 +40,27 @@ def extract(title: str = Query(...), description: str = ""):
 
 
 @app.get("/search")
-def search(q: str = Query(...)):
-    if PROVIDER == "mock" or True:  # keep mock until a real provider is wired
-        mocks = [
-            ("MOCK1", f"Bio Basmati Reis, 2 x 1kg ({q})", 1299, "https://www.amazon.de/dp/MOCK1"),
-            ("MOCK2", f"Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings ({q})", 6499, "https://www.amazon.de/dp/MOCK2"),
-            ("MOCK3", f"Bio Kaffee Bohnen 500g ({q})", 899, "https://www.amazon.de/dp/MOCK3"),
-        ]
-        items = [enrich(*m) for m in mocks]
-        items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
-        return {"items": items, "provider": PROVIDER}
+def search(q: str = Query(...), marketplace: str = Query("de"),
+           provider: str | None = Query(None), stores: str = Query("all")):
+    name = provider or os.getenv("DATA_PROVIDER", "mock")
+    fn = PROVIDERS.get(name)
+    meta: dict = {"amazon_provider": name, "feed_shops": "skipped"}
+    if not fn:
+        return {"items": [], "meta": meta, "error": f"unknown provider '{name}'"}
+    try:
+        rows = fn(q, marketplace)
+    except RuntimeError as e:
+        return {"items": [], "meta": meta, "error": str(e)}
+    items = [enrich(pid, title, price, url, shop, marketplace) for pid, title, price, url, shop in rows]
+
+    if stores == "all":
+        try:
+            from feeds import search_feeds
+            for pid, title, price, url, shop in search_feeds(q):
+                items.append(enrich(pid, title, price, url, shop, marketplace))
+            meta["feed_shops"] = "included"
+        except (RuntimeError, ImportError) as e:
+            meta["feed_shops"] = str(e)
+
+    items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
+    return {"items": items, "meta": meta}

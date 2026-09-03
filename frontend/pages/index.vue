@@ -9,11 +9,12 @@
     <p v-if="pending">Loading…</p>
     <table v-if="results.length" border="1" cellpadding="8" style="margin-top: 1rem; border-collapse: collapse; width: 100%">
       <thead>
-        <tr><th>Product</th><th>Price</th><th>Qty</th><th>Unit price</th><th></th></tr>
+        <tr><th>Product</th><th>Store</th><th>Price</th><th>Qty</th><th>Unit price</th><th></th></tr>
       </thead>
       <tbody>
         <tr v-for="r in results" :key="r.asin">
           <td>{{ r.title }}</td>
+          <td>{{ r.store || 'Amazon' }}</td>
           <td>{{ (r.priceCents / 100).toFixed(2) }} €</td>
           <td>{{ r.qty ? `${r.qty.value.toFixed(2)} ${r.qty.unit}` : '–' }}</td>
           <td><strong v-if="r.unitPrice">{{ (r.unitPrice.per / 100).toFixed(2) }} € / {{ r.unitPrice.base }}</strong><span v-else>–</span></td>
@@ -37,6 +38,38 @@ const brand = computed(() => {
 const q = ref('');
 const results = ref<any[]>([]);
 const pending = ref(false);
+// SEO: SSR-rendered per-brand tags (useRequestURL works on server + client)
+const url = useRequestURL();
+const pageTitle = computed(() => `${brand.value?.name || 'PriceMatters'} – Grundpreise vergleichen (€/kg, €/l, €/Stück)`);
+const pageDesc = computed(() => locale.startsWith('de') ? brand.value?.sloganDE : brand.value?.sloganEN);
+useSeoMeta({
+  title: () => pageTitle.value,
+  description: () => pageDesc.value,
+  ogTitle: () => pageTitle.value,
+  ogDescription: () => pageDesc.value,
+  ogUrl: () => url.href,
+  ogImage: () => `${url.origin}/og.png`,
+  twitterTitle: () => pageTitle.value,
+  twitterDescription: () => pageDesc.value,
+  twitterImage: () => `${url.origin}/og.png`,
+});
+useHead({
+  link: [{ rel: 'canonical', href: () => url.href }],
+  script: [{
+    type: 'application/ld+json',
+    children: () => JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: brand.value?.name || 'PriceMatters',
+      url: url.origin,
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${url.origin}/?q={query}`,
+        'query-input': 'required name=query',
+      },
+    }),
+  }],
+});
 async function search() {
   if (!q.value.trim()) return;
   pending.value = true;

@@ -18,6 +18,23 @@ sort by **unit price** — no ads, no fake discounts.
 You do **not** need the Python backend on day 1 — Nuxt server routes + `lib/units.ts`
 already work. Keep FastAPI as the extraction + provider microservice.
 
+## Deploy on Oracle (130.61.104.107, Traefik `proxy` network)
+
+```bash
+# on the server, under /home/ubuntu/websters/customers/:
+git clone <your-repo> pricematters && cd pricematters
+cp .env.example .env
+# set in .env: DOMAIN=<sub>.websters.at  ROUTER_NAME=pricematters
+#              TRAEFIK_NETWORK=proxy  POSTGRES_PASSWORD=<long random>
+docker compose up -d --build
+```
+
+Amazon re-approval needs the live URL: register the subdomain in PartnerNet
+*before* reapplying, then put the real tag in `AMAZON_PARTNER_TAG`.
+CI: `.github/workflows/deploy.yml` does `git pull + compose up` on every push
+to main. Needs repo secrets: `SERVER_HOST`, `SERVER_USER`, `SSH_PRIVATE_KEY`,
+`DEPLOY_PATH=/home/ubuntu/websters/customers/pricematters`.
+
 ## Quickstart
 
 ```bash

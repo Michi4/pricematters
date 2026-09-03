@@ -30,6 +30,9 @@ services:
     container_name: pricematters-backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      DB_HOST: database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pricematters}:${POSTGRES_PASSWORD:-pricematters}@database:5432/${POSTGRES_DB:-pricematters}
     expose:
       - "8000"
     depends_on:
