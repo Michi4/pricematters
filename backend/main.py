@@ -285,8 +285,9 @@ def contact(c: Contact):
 
 
 @app.get("/popular")
-def popular(marketplace: str = Query("de"), limit: int = Query(4)):
-    """Top user queries, last 30 days. [] -> frontend falls back to static hints."""
+def popular(marketplace: str = Query("de"), lang: str = Query("de"), limit: int = Query(4)):
+    """Top user queries, last 30 days, translated to the UI language.
+    [] -> frontend falls back to static hints."""
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -297,9 +298,23 @@ def popular(marketplace: str = Query("de"), limit: int = Query(4)):
                 """SELECT query, COUNT(*) AS c FROM searches
                    WHERE marketplace = %s AND created_at > now() - interval '30 days'
                    GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
-                (marketplace, limit),
+                (marketplace, max(limit * 2, 8)),
             )
-            return {"items": [r[0] for r in cur.fetchall()]}
+            queries = [r[0] for r in cur.fetchall()]
+        # translate chips to the selected UI language (de marketplaces are typed de, rest en)
+        dst = "de" if lang.lower().startswith("de") else "en"
+        src = "de" if marketplace in ("de", "at", "ch") else "en"
+        if src != dst:
+            from translate import translate
+            queries = [translate(q, src, dst) for q in queries]
+        seen: set[str] = set()
+        out: list[str] = []
+        for q in queries:
+            k = q.lower()
+            if k not in seen:
+                seen.add(k)
+                out.append(q)
+        return {"items": out[:limit]}
     except Exception:
         return {"items": []}
 

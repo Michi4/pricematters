@@ -336,7 +336,7 @@ function faveUnit(f: any) {
 }
 async function loadPopular() {
   try {
-    const data = await $fetch('/api/popular', { query: { marketplace: marketplace.value } }) as any;
+    const data = await $fetch('/api/popular', { query: { marketplace: marketplace.value, lang: locale.value } }) as any;
     if (data?.items?.length) popularApi.value = data.items;
   } catch { /* static fallback stays */ }
 }
