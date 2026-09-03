@@ -411,8 +411,11 @@ def stats(request: Request, days: int = Query(30)):
                     GROUP BY 1 ORDER BY 2 DESC LIMIT 20""", (days,))
             out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)) FROM events
                 WHERE ms > 0 AND ts > now() - make_interval(days => %s) GROUP BY kind""", (days,))
-            out["adInquiries"] = rows("""SELECT name, email, slot, created_at::date::text
-                FROM ad_inquiries ORDER BY created_at DESC LIMIT 25""")
+            try:
+                out["adInquiries"] = rows("""SELECT name, email, slot, created_at::date::text
+                    FROM ad_inquiries ORDER BY created_at DESC LIMIT 25""")
+            except Exception:
+                out["adInquiries"] = []
             return out
     except Exception as e:
         return {"error": str(e)}
