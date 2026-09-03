@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <header class="top">
-      <NuxtLink :to="localePath('/')" class="logo">
+      <NuxtLink :to="localePath('/')" class="logo" @click="goHome">
         <img src="/logo.svg" alt="logo" width="28" height="28" class="logo-light" />
         <img src="/logo-dark.svg" alt="logo" width="28" height="28" class="logo-dark" />
         <span>{{ brand.name }}</span>
@@ -435,6 +435,15 @@ const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
 const moneyBare = (cents: number) => (cents / 100).toFixed(2);
 // quantities: max 2 decimals, no float artifacts (2721.551999999997 -> 2721.55)
 const fmtQty = (v: number) => String(parseFloat(Number(v).toFixed(2)));
+
+function goHome() {
+  // logo click: back to fresh homepage with favorites
+  searched.value = false;
+  results.value = [];
+  q.value = '';
+  page.value = 1;
+  if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 async function search() {
   if (!q.value.trim()) return;
