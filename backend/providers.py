@@ -28,9 +28,9 @@ def mock_search(query: str, marketplace: str):
     # until a real provider key is configured.
     domain = "www.amazon.de" if marketplace in ("de", "at") else f"www.amazon.{marketplace}"
     return [
-        ("MOCK1", "Bio Basmati Reis, 2 x 1kg", 1299, f"https://{domain}/dp/MOCK1", "Amazon"),
-        ("MOCK2", "Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings", 6499, f"https://{domain}/dp/MOCK2", "Amazon"),
-        ("MOCK3", "Bio Kaffee Bohnen 500g", 899, f"https://{domain}/dp/MOCK3", "Amazon"),
+        ("MOCK1", "Bio Basmati Reis, 2 x 1kg", 1299, f"https://{domain}/dp/MOCK1", "Amazon", None),
+        ("MOCK2", "Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings", 6499, f"https://{domain}/dp/MOCK2", "Amazon", None),
+        ("MOCK3", "Bio Kaffee Bohnen 500g", 899, f"https://{domain}/dp/MOCK3", "Amazon", None),
     ]
 
 
@@ -76,7 +76,8 @@ def scrapingbee_search(query: str, marketplace: str):
         if not asin or price is None:
             continue
         out.append((asin, p.get("name") or p.get("title", ""), price,
-                    p.get("url") or p.get("link", ""), "Amazon"))
+                    p.get("url") or p.get("link", ""), "Amazon",
+                    (p.get("image") or p.get("thumbnail")) or None))
     return out
 
 
@@ -97,7 +98,8 @@ def rainforest_search(query: str, marketplace: str):
         price = _price_to_cents((p.get("price") or {}).get("value", p.get("price")))
         if not asin or price is None:
             continue
-        out.append((asin, p.get("title", ""), price, p.get("link", ""), "Amazon"))
+        out.append((asin, p.get("title", ""), price, p.get("link", ""), "Amazon",
+                    (p.get("image") or p.get("thumbnail")) or None))
     return out
 
 
@@ -120,7 +122,8 @@ def serpapi_search(query: str, marketplace: str):
             continue
         pid = str(p.get("product_id") or p.get("link", ""))
         out.append((f"serp:{pid}", p.get("title", ""), price_cents,
-                    p.get("link", ""), p.get("source", "Shop")))
+                    p.get("link", ""), p.get("source", "Shop"),
+                    (p.get("thumbnail") or p.get("image")) or None))
     return out
 
 

@@ -116,12 +116,12 @@ def search_feeds(query: str, limit: int = 30):
     """Full-text search over imported feeds. Returns provider-style rows."""
     with db() as conn, conn.cursor() as cur:
         cur.execute(
-            """SELECT id, title, price_cents, url, shop FROM shop_products
+            """SELECT id, title, price_cents, url, shop, image_url FROM shop_products
                WHERE search @@ plainto_tsquery('german', %s)
                ORDER BY ts_rank(search, plainto_tsquery('german', %s)) DESC LIMIT %s""",
             (query, query, limit),
         )
-        return [(i, t, p, u, s) for i, t, p, u, s in cur.fetchall()]
+        return [(i, t, p, u, s, im) for i, t, p, u, s, im in cur.fetchall()]
 
 
 if __name__ == "__main__":
