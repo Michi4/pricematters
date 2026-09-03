@@ -26,8 +26,19 @@ import time
 import urllib.parse
 import urllib.request
 
-PROXY_SOURCE = ("https://api.proxyscrape.com/v2/?request=getproxies&protocol=http"
-                "&timeout=8000&country=all&ssl=all&anonymity=all")
+PROXY_SOURCES = [
+    # (name, url, format) — all free, no key, verified 2026-09
+    ("proxyscrape", "https://api.proxyscrape.com/v2/?request=getproxies&protocol=http"
+                    "&timeout=8000&country=all&ssl=all&anonymity=all", "text"),
+    ("iplocate-http", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/http.txt", "text"),
+    ("iplocate-https", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/https.txt", "text"),
+    ("iplocate-de", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/countries/DE/proxies.txt", "text"),
+    ("geonode", "https://proxylist.geonode.com/api/proxy-list?limit=100&page=1&sort_by=lastChecked"
+                "&sort_type=desc&protocols=http%2Chttps", "geonode"),
+]
+# Keyed quality proxies (free signups, YOURS — tried before any free pool):
+#   WEBSHARE_PROXIES="user:pass@host:port,user:pass@host2:port2"  (10 free + 1GB/mo at webshare.io)
+#   IPVANISH_USER / IPVANISH_PASS / IPVANISH_HOST (default fra.socks.ipvanish.com:1080, SOCKS5)
 POOL_TTL = 600
 _last_fetch = 0.0
 _pool: list[str] = []
@@ -49,25 +60,116 @@ def _budget_left() -> bool:
     return _used_today < int(os.getenv("SELFSCRAPE_DAILY_BUDGET", "50"))
 
 
+def _keyed_http_proxies() -> list[str]:
+    """Your private quality proxies: 'user:pass@host:port,...' (Webshare free 10)."""
+    out = []
+    for part in os.getenv("WEBSHARE_PROXIES", "").split(","):
+        part = part.strip()
+        if part and ":" in part:
+            out.append(part if "://" in part else f"http://{part}")
+    return out
+
+
+def _ipvanish() -> tuple[str, str, str] | None:
+    u, p = os.getenv("IPVANISH_USER", ""), os.getenv("IPVANISH_PASS", "")
+    h = os.getenv("IPVANISH_HOST", "fra.socks.ipvanish.com:1080")
+    return (u, p, h) if u and p else None
+
+
+def _fetch_source(name: str, url: str, fmt: str) -> list[str]:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "pricematters/0.1"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read().decode(errors="ignore")
+        if fmt == "geonode":
+            import json as _json
+            items = _json.loads(body).get("data", [])
+            return [f"{d['ip']}:{d['port']}" for d in items if d.get("ip") and d.get("port")]
+        return [l.strip() for l in body.splitlines()
+                if re.match(r"^\d+\.\d+\.\d+\.\d+:\d+$", l.strip())]
+    except Exception:
+        return []
+
+
+_good: list[str] = []  # proxies that worked recently go first
+
+
 def _pool() -> list[str]:
     global _last_fetch, _pool
     with _lock:
         if time.time() - _last_fetch < POOL_TTL and _pool:
-            return list(_pool)
-    try:
-        req = urllib.request.Request(PROXY_SOURCE, headers={"User-Agent": "pricematters/0.1"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            lines = r.read().decode(errors="ignore").splitlines()
-        proxies = [l.strip() for l in lines if re.match(r"^\d+\.\d+\.\d+\.\d+:\d+$", l.strip())]
-    except Exception:
-        proxies = []
+            return _good + [p for p in _pool if p not in _good]
+    merged: list[str] = []
+    for name, url, fmt in PROXY_SOURCES:
+        for px in _fetch_source(name, url, fmt):
+            if px not in merged:
+                merged.append(px)
     with _lock:
-        _pool, _last_fetch = proxies[:200], time.time()
-        return list(_pool)
+        _pool, _last_fetch = merged[:400], time.time()
+        return _good + [p for p in _pool if p not in _good]
+
+
+def _remember_good(px: str):
+    with _lock:
+        if px in _good:
+            _good.remove(px)
+        _good.insert(0, px)
+        del _good[20:]
+
+
+UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+
+def _open(url: str, opener=None) -> str | None:
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+    })
+    try:
+        if opener:
+            with opener.open(req, timeout=12) as r:
+                html = r.read().decode("utf-8", errors="ignore")
+        else:
+            with urllib.request.urlopen(req, timeout=12) as r:
+                html = r.read().decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    if "Enter the characters you see" in html or len(html) < 20000:
+        return None  # captcha or block page
+    return html
+
+
+_socks_lock = threading.Lock()
+
+
+def _via_ipvanish(url: str) -> str | None:
+    """Your private IPVanish SOCKS5 (Frankfurt for amazon.de). Needs PySocks."""
+    creds = _ipvanish()
+    if not creds:
+        return None
+    try:
+        import socket
+        import socks
+    except ImportError:
+        return None
+    user, pw, hostport = creds
+    host, _, port = hostport.partition(":")
+    import socket as _sockmod
+    orig = _sockmod.socket
+    with _socks_lock:
+        try:
+            socks.set_default_proxy(socks.SOCKS5, host, int(port or 1080),
+                                    username=user, password=pw)
+            _sockmod.socket = socks.socksocket
+            return _open(url)
+        except Exception:
+            return None
+        finally:
+            _sockmod.socket = orig
 
 
 def _fetch(url: str) -> str | None:
-    """One throttled, budgeted request through a rotating free proxy."""
+    """Tiered: Webshare (yours) -> IPVanish SOCKS5 (yours) -> free pools."""
     global _last_req, _used_today
     with _lock:
         wait = 10 - (time.time() - _last_req)
@@ -78,21 +180,30 @@ def _fetch(url: str) -> str | None:
             return None
         _used_today += 1
     import random
+    for px in _keyed_http_proxies()[:10]:
+        try:
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({"http": px, "https": px}))
+            html = _open(url, opener)
+            if html:
+                return html
+        except Exception:
+            continue
+    html = _via_ipvanish(url)
+    if html:
+        return html
     pool = _pool()
     random.shuffle(pool)
-    for px in pool[:6]:  # try up to 6 proxies per search, then give up honestly
+    for px in pool[:8]:
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                               "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"),
-                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-            })
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
             req.set_proxy(px, "http")
             req.set_proxy(px, "https")
             with urllib.request.urlopen(req, timeout=12) as r:
                 html = r.read().decode("utf-8", errors="ignore")
             if "Enter the characters you see" in html or len(html) < 20000:
-                continue  # captcha or block page, next proxy
+                continue
+            _remember_good(px)
             return html
         except Exception:
             continue

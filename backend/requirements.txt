@@ -3,3 +3,4 @@ uvicorn[standard]==0.30.*
 pydantic==2.*
 redis==5.*
 psycopg[binary]==3.*
+PySocks==1.7.*
