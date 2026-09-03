@@ -147,8 +147,9 @@ def zenrows_search(query: str, marketplace: str):
               "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
     target = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
     try:
+        # premium_proxy (residential) beats Amazon's bot manager; plain datacenter IPs get challenged
         full = ("https://api.zenrows.com/v1/?" + urllib.parse.urlencode(
-            {"apikey": key, "url": target}))
+            {"apikey": key, "url": target, "premium_proxy": "true"}))
         req = urllib.request.Request(full, headers={"User-Agent": "pricematters/0.1"})
         with urllib.request.urlopen(req, timeout=60) as r:
             html = r.read().decode("utf-8", errors="ignore")
