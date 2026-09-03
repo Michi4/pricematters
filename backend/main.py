@@ -63,54 +63,65 @@ def extract(title: str = Query(...), description: str = ""):
 @app.get("/search")
 def search(q: str = Query(...), marketplace: str = Query("de"),
            provider: str | None = Query(None), stores: str = Query("all")):
-    name = provider or os.getenv("DATA_PROVIDER", "mock")
-    fn = PROVIDERS.get(name)
-    meta: dict = {"amazon_provider": name, "feed_shops": "skipped",
-                  "demo": name == "mock", "queries": [q]}
-    if not fn:
-        return {"items": [], "meta": meta, "error": f"unknown provider '{name}'"}
+    single = provider or None
+    if single:
+        chain = [single]
+    else:
+        chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
+        chain = chain or [os.getenv("DATA_PROVIDER", "mock")]
+    chain = [c for c in chain if c in PROVIDERS]
+    if not chain:
+        return {"items": [], "meta": {"chain": chain}, "error": "no known provider in chain"}
+    meta: dict = {"chain": chain, "feed_shops": "skipped",
+                  "demo": chain == ["mock"], "queries": [q]}
+    name = chain[0]
     from cache import get as cache_get, store as cache_store
+    from providers import DEFAULT_CHAIN  # noqa (keeps default order documented)
     seen: set[str] = set()
     items: list[dict] = []
-    ckey = f"{name}:{marketplace}:{q}"
-    cached = cache_get(ckey) if name != "mock" else None
-    if cached:
-        rows, age, hits = cached
-        meta["cache"] = f"hit ({age // 60}m old, {hits} hits)"
-        for row in rows:
-            seen.add(row[0])
-            items.append(enrich(*row, marketplace))
-    else:
+    errors: dict = {}
+    used = "mock"
+    rows: list = []
+    for cand in chain:
+        ckey = f"{cand}:{marketplace}:{q}"
+        cached = cache_get(ckey) if cand != "mock" else None
+        if cached:
+            rows, age, hits = cached
+            meta["cache"] = f"hit ({age // 60}m old, {hits} hits)"
+            used = cand
+            break
         try:
-            variants = query_variants(q, marketplace) if name != "mock" else [q]
+            variants = query_variants(q, marketplace) if cand != "mock" else [q]
             meta["queries"] = variants
             rows = []
             for v in variants:
-                for row in fn(v, marketplace):
+                for row in PROVIDERS[cand](v, marketplace):
                     if row[0] in seen:
                         continue
                     seen.add(row[0])
                     rows.append(row)
+            if not rows:
+                raise RuntimeError("no rows")
             fp = "|".join(f"{r[0]}:{r[2]}" for r in rows)
             info = cache_store(ckey, rows, fp)
             meta["cache"] = f"fresh (ttl {info['ttl'] // 3600}h)"
-            items = [enrich(*row, marketplace) for row in rows]
+            used = cand
+            break
         except RuntimeError as e:
-            if name == "mock":
-                return {"items": [], "meta": meta, "error": str(e)}
-            # real provider failed -> honest demo fallback, never a dead page
-            meta["error"] = str(e)
-            meta["fallback"] = True
-            meta["demo"] = True
-            rows = PROVIDERS["mock"](q, marketplace)
-            fp = "|".join(f"{r[0]}:{r[2]}" for r in rows)
-            try:
-                cache_store(ckey, rows, fp)
-            except Exception:
-                pass
-            items = [enrich(*row, marketplace) for row in rows]
-            for row in rows:
-                seen.add(row[0])
+            errors[cand] = str(e)
+            rows = []
+            continue
+    if not rows and "mock" not in chain:
+        rows = PROVIDERS["mock"](q, marketplace)
+        used = "mock-fallback"
+    if errors:
+        meta["provider_errors"] = errors
+    meta["provider_used"] = used
+    meta["demo"] = used in ("mock", "mock-fallback")
+    name = used
+    for row in rows:
+        seen.add(row[0])
+        items.append(enrich(*row, marketplace))
 
     if stores == "all":
         try:

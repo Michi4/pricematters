@@ -107,26 +107,59 @@ def rainforest_search(query: str, marketplace: str):
 
 
 def serpapi_search(query: str, marketplace: str):
-    """Google Shopping live search (whole web). Needs SERPAPI_API_KEY (paid, serpapi.com).
-    Defensive parsing: unknown fields are skipped, never crash the whole search."""
+    """SerpApi amazon engine (250 free searches/mo). organic_results -> rows."""
     key = os.getenv("SERPAPI_API_KEY", "")
     if not key:
         raise RuntimeError("SERPAPI_API_KEY not set")
-    gl = {"de": "de", "at": "at", "com": "us", "co.uk": "uk", "fr": "fr"}.get(marketplace, "de")
+    domain = {"de": "amazon.de", "at": "amazon.de", "com": "amazon.com",
+              "co.uk": "amazon.co.uk", "fr": "amazon.fr"}.get(marketplace, "amazon.de")
+    lang = {"amazon.de": "de_DE", "amazon.com": "en_US",
+            "amazon.co.uk": "en_GB", "amazon.fr": "fr_FR"}.get(domain, "de_DE")
     data = _get("https://serpapi.com/search.json", {
-        "api_key": key, "engine": "google_shopping", "q": query,
-        "gl": gl, "hl": "de" if gl in ("de", "at") else "en",
+        "api_key": key, "engine": "amazon", "k": query,
+        "amazon_domain": domain, "language": lang,
     })
+    if data.get("error"):
+        raise RuntimeError(f"serpapi: {data['error']}")
     out = []
-    for p in data.get("shopping_results", []):
-        price = p.get("extracted_price")
-        price_cents = int(round(float(price) * 100)) if isinstance(price, (int, float)) else _price_to_cents(p.get("price"))
-        if price_cents is None:
+    for p in data.get("organic_results", []):
+        asin = p.get("asin", "")
+        price = p.get("price")
+        if isinstance(price, dict):
+            price = price.get("extracted") or price.get("value") or price.get("raw")
+        price_cents = _price_to_cents(price)
+        if not asin or price_cents is None:
             continue
-        pid = str(p.get("product_id") or p.get("link", ""))
-        out.append((f"serp:{pid}", p.get("title", ""), price_cents,
-                    p.get("link", ""), p.get("source", "Shop"),
-                    (p.get("thumbnail") or p.get("image")) or None))
+        out.append((asin, p.get("title", ""), price_cents,
+                    p.get("link", "") or f"https://{domain}/dp/{asin}",
+                    "Amazon", p.get("thumbnail") or p.get("image")))
+    if not out:
+        raise RuntimeError("serpapi returned 0 priced products.")
+    return out
+
+
+def zenrows_search(query: str, marketplace: str):
+    """Zenrows universal scrape (free tier) of the Amazon search page + shared parser."""
+    key = os.getenv("ZENROWS_API_KEY", "")
+    if not key:
+        raise RuntimeError("ZENROWS_API_KEY not set")
+    domain = {"de": "www.amazon.de", "at": "www.amazon.de", "com": "www.amazon.com",
+              "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
+    target = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
+    try:
+        full = ("https://api.zenrows.com/v1/?" + urllib.parse.urlencode(
+            {"apikey": key, "url": target}))
+        req = urllib.request.Request(full, headers={"User-Agent": "pricematters/0.1"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            html = r.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        raise RuntimeError(f"zenrows fetch failed: {e}")
+    if not html or len(html) < 20000 or "Tut uns Leid" in html:
+        raise RuntimeError("zenrows returned block page / empty.")
+    from amazon_parse import parse_search
+    out = parse_search(html, domain)
+    if not out:
+        raise RuntimeError("zenrows parsed 0 products.")
     return out
 
 
@@ -150,9 +183,13 @@ def creators_search(query: str, marketplace: str):
 
 PROVIDERS = {
     "mock": mock_search,
+    "zenrows": zenrows_search,
+    "serpapi": serpapi_search,
     "scrapingbee": scrapingbee_search,
     "rainforest": rainforest_search,
-    "serpapi": serpapi_search,
     "selfscrape": selfscrape_search,
     "creators": creators_search,
 }
+
+# cheapest-first default chain (free tiers before paid before experimental)
+DEFAULT_CHAIN = ["zenrows", "serpapi", "scrapingbee", "rainforest", "selfscrape", "mock"]

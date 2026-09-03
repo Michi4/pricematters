@@ -29,7 +29,10 @@
       "unit": "Unit price (cheapest first)",
       "priceAsc": "Price ascending",
       "priceDesc": "Price descending",
-      "name": "Name A–Z"
+      "name": "Name A–Z",
+      "shortUnit": "Unit price",
+      "shortAsc": "Price ↑",
+      "shortDesc": "Price ↓"
     },
     "unit": { "label": "Show as" },
     "filterTitle": "Filters & display",

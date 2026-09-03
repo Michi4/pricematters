@@ -246,18 +246,6 @@ def _fetch(url: str) -> str | None:
     return None
 
 
-ASIN_RE = re.compile(r'data-asin="(B0[A-Z0-9]{8})"')
-PRICE_RE = re.compile(r"€\s*(\d{1,4}[.,]\d{2})")
-
-
-def _cents(s: str) -> int | None:
-    s = s.replace(".", "").replace(",", ".") if "," in s else s
-    try:
-        return int(round(float(s) * 100))
-    except ValueError:
-        return None
-
-
 def selfscrape_search(query: str, marketplace: str):
     if not _enabled():
         raise RuntimeError("SELFSCRAPE_CONSENT=1 not set — enable explicitly (see selfscrape.py header).")
@@ -267,23 +255,8 @@ def selfscrape_search(query: str, marketplace: str):
     html = _fetch(url)
     if not html:
         raise RuntimeError("self-scrape failed (proxies blocked or budget spent) — try mock/scrapingbee.")
-    out, seen = [], set()
-    blocks = re.split(r'data-asin="', html)
-    for b in blocks[1:]:
-        m = re.match(r"(B0[A-Z0-9]{8})", b)
-        if not m or m.group(1) in seen:
-            continue
-        asin = m.group(1)
-        t = re.search(r"<h2[^>]*>.*?<span>(.*?)</span>", b, re.S)
-        title = re.sub(r"<[^>]+>", "", t.group(1)).strip() if t else ""
-        p = PRICE_RE.search(b[:8000])
-        cents = _cents(p.group(1)) if p else None
-        if not title or cents is None:
-            continue
-        seen.add(asin)
-        out.append((asin, title, cents, f"https://{domain}/dp/{asin}", "Amazon", None))
-        if len(out) >= 20:
-            break
+    from amazon_parse import parse_search
+    out = parse_search(html, domain)
     if not out:
         raise RuntimeError("self-scrape parsed 0 products (page shape changed or blocked).")
     return out

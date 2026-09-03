@@ -39,8 +39,8 @@
           <h1 :key="sloganIdx" v-html="fmtSlogan(slogans[sloganIdx] || '')"></h1>
         </Transition>
         <form class="search" @submit.prevent="search">
-          <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus />
-          <select v-model="marketplace" :title="t('hero.marketplace')">
+          <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus @keydown.enter.prevent="search" />
+          <select v-model="marketplace" :title="t('hero.marketplace')" @change="saveMarket">
             <option value="de">{{ t('hero.markets.de') }}</option>
             <option value="at">{{ t('hero.markets.at') }}</option>
             <option value="com">{{ t('hero.markets.com') }}</option>
@@ -64,13 +64,11 @@
         </div>
 
         <div v-if="sorted.length" class="controls">
-          <label>{{ t('results.sort.label') }}
-            <select v-model="sortKey">
-              <option value="unit">{{ t('results.sort.unit') }}</option>
-              <option value="priceAsc">{{ t('results.sort.priceAsc') }}</option>
-              <option value="priceDesc">{{ t('results.sort.priceDesc') }}</option>
-            </select>
-          </label>
+          <div class="segmented" role="tablist" :aria-label="t('results.sort.label')">
+            <button :class="{ active: sortKey === 'unit' }" @click="sortKey = 'unit'">{{ t('results.sort.shortUnit') }}</button>
+            <button :class="{ active: sortKey === 'priceAsc' }" @click="sortKey = 'priceAsc'">{{ t('results.sort.shortAsc') }}</button>
+            <button :class="{ active: sortKey === 'priceDesc' }" @click="sortKey = 'priceDesc'">{{ t('results.sort.shortDesc') }}</button>
+          </div>
         </div>
 
         <details v-if="sorted.length" class="filters-wrap">
@@ -239,11 +237,18 @@ onUnmounted(() => { if (timer) clearInterval(timer); });
 
 const q = ref('');
 const marketplace = ref('de');
-// Auto: amazon address by user locale (de-AT -> at, en-GB -> co.uk, fr -> fr, en -> com)
+// Auto: amazon address by user locale (de-AT -> at, en-GB -> co.uk, fr -> fr, en -> com),
+// persisted in a cookie once chosen; ?marketplace= overrides everything.
+function readCookie(name: string): string {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
 function guessMarketplace(): string {
   try {
     const forced = String(route.query.marketplace || '');
     if (['de', 'at', 'com', 'co.uk', 'fr'].includes(forced)) return forced;
+    const saved = readCookie('pm_market');
+    if (['de', 'at', 'com', 'co.uk', 'fr'].includes(saved)) return saved;
     const l = navigator.language || '';
     if (/^de-AT/i.test(l)) return 'at';
     if (/^de/i.test(l)) return 'de';
@@ -252,6 +257,9 @@ function guessMarketplace(): string {
     if (/^en/i.test(l)) return 'com';
   } catch { /* SSR: default */ }
   return 'de';
+}
+function saveMarket() {
+  try { document.cookie = `pm_market=${marketplace.value};max-age=31536000;path=/;SameSite=Lax`; } catch { /* ignore */ }
 }
 const results = ref<any[]>([]);
 const meta = ref<any>({});
@@ -303,7 +311,7 @@ async function search() {
   if (!q.value.trim()) return;
   pending.value = true;
   try {
-    await navigateTo({ query: { q: q.value } }, { replace: true });
+    await navigateTo({ query: { q: q.value, marketplace: marketplace.value } }, { replace: true });
     const data = await $fetch('/api/search', { query: { q: q.value, marketplace: marketplace.value } });
     results.value = (data as any).items || [];
     meta.value = (data as any).meta || {};
@@ -463,6 +471,9 @@ body { margin: 0; }
 .card-body { flex: 1; min-width: 0; }
 .stores button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
 .stores button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
+.segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
+.segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
 .empty { text-align: center; color: var(--mut); padding: 2rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; margin-bottom: 0.8rem; }
 .card.best { border: 2px solid var(--green); }

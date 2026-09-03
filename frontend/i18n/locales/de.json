@@ -29,7 +29,10 @@
       "unit": "Grundpreis (billigste zuerst)",
       "priceAsc": "Preis aufsteigend",
       "priceDesc": "Preis absteigend",
-      "name": "Name A–Z"
+      "name": "Name A–Z",
+      "shortUnit": "Grundpreis",
+      "shortAsc": "Preis ↑",
+      "shortDesc": "Preis ↓"
     },
     "unit": { "label": "Anzeigen als" },
     "filterTitle": "Filter & Anzeige",
