@@ -18,6 +18,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from selfscrape import selfscrape_search
 
 TIMEOUT = 25
 
@@ -150,5 +151,6 @@ PROVIDERS = {
     "scrapingbee": scrapingbee_search,
     "rainforest": rainforest_search,
     "serpapi": serpapi_search,
+    "selfscrape": selfscrape_search,
     "creators": creators_search,
 }

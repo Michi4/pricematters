@@ -43,3 +43,13 @@ CREATE TABLE IF NOT EXISTS shop_products (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_shop_search ON shop_products USING GIN (search);
+
+-- Ad-slot inquiries (contact form)
+CREATE TABLE IF NOT EXISTS ad_inquiries (
+  id SERIAL PRIMARY KEY,
+  name TEXT,
+  email TEXT,
+  slot TEXT,
+  message TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);

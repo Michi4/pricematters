@@ -8,6 +8,7 @@ Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
 import os
 from fastapi import FastAPI, Query
+from pydantic import BaseModel
 from affiliate import monetize
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
@@ -68,20 +69,34 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
                   "demo": name == "mock", "queries": [q]}
     if not fn:
         return {"items": [], "meta": meta, "error": f"unknown provider '{name}'"}
+    from cache import get as cache_get, store as cache_store
     seen: set[str] = set()
     items: list[dict] = []
-    try:
-        variants = query_variants(q, marketplace) if name != "mock" else [q]
-        meta["queries"] = variants
-        for v in variants:
-            for row in fn(v, marketplace):
-                pid = row[0]
-                if pid in seen:
-                    continue
-                seen.add(pid)
-                items.append(enrich(*row, marketplace))
-    except RuntimeError as e:
-        return {"items": [], "meta": meta, "error": str(e)}
+    ckey = f"{name}:{marketplace}:{q}"
+    cached = cache_get(ckey) if name != "mock" else None
+    if cached:
+        rows, age, hits = cached
+        meta["cache"] = f"hit ({age // 60}m old, {hits} hits)"
+        for row in rows:
+            seen.add(row[0])
+            items.append(enrich(*row, marketplace))
+    else:
+        try:
+            variants = query_variants(q, marketplace) if name != "mock" else [q]
+            meta["queries"] = variants
+            rows = []
+            for v in variants:
+                for row in fn(v, marketplace):
+                    if row[0] in seen:
+                        continue
+                    seen.add(row[0])
+                    rows.append(row)
+            fp = "|".join(f"{r[0]}:{r[2]}" for r in rows)
+            info = cache_store(ckey, rows, fp)
+            meta["cache"] = f"fresh (ttl {info['ttl'] // 3600}h)"
+            items = [enrich(*row, marketplace) for row in rows]
+        except RuntimeError as e:
+            return {"items": [], "meta": meta, "error": str(e)}
 
     if stores == "all":
         try:
@@ -98,6 +113,43 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
     items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
     log_search(q, marketplace, len(items))
     return {"items": items, "meta": meta}
+
+
+@app.get("/cache/stats")
+def cache_stats():
+    from cache import stats
+    return stats()
+
+
+class Contact(BaseModel):
+    name: str = ""
+    email: str = ""
+    message: str = ""
+    slot: str = ""
+
+
+@app.post("/contact")
+def contact(c: Contact):
+    """Ad-slot inquiry: Postgres if available, stdout log otherwise. Always honest ok-flag."""
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            raise RuntimeError("no db")
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS ad_inquiries
+                   (id SERIAL PRIMARY KEY, name TEXT, email TEXT, slot TEXT,
+                    message TEXT, created_at TIMESTAMPTZ DEFAULT now())"""
+            )
+            cur.execute(
+                "INSERT INTO ad_inquiries (name, email, slot, message) VALUES (%s,%s,%s,%s)",
+                (c.name[:120], c.email[:160], c.slot[:40], c.message[:2000]),
+            )
+        return {"ok": True, "stored": "db"}
+    except Exception as e:
+        print(f"[contact] {c.slot} {c.name} <{c.email}>: {c.message[:200]} ({e})", flush=True)
+        return {"ok": True, "stored": "log"}
 
 
 @app.get("/popular")
