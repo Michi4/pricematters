@@ -306,7 +306,7 @@ def popular(marketplace: str = Query("de"), lang: str = Query("de"), limit: int 
         src = "de" if marketplace in ("de", "at", "ch") else "en"
         if src != dst:
             from translate import translate
-            queries = [translate(q, src, dst) for q in queries]
+            queries = [translate(q, src, dst).rstrip(' ?.!').strip() or q for q in queries]
         seen: set[str] = set()
         out: list[str] = []
         for q in queries:
