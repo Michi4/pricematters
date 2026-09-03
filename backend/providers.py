@@ -156,17 +156,18 @@ def serpapi_product(asin: str, domain: str = "amazon.de"):
     })
     if data.get("error"):
         raise RuntimeError(f"serpapi: {data['error']}")
-    title = data.get("title") or data.get("product_title") or data.get("name") or ""
-    price = data.get("price")
+    pr = data.get("product_results", {}) or {}
+    title = pr.get("title", "")
+    price = pr.get("extracted_price", pr.get("price"))
     if isinstance(price, dict):
         price = price.get("extracted") or price.get("value") or price.get("raw")
-    image = data.get("main_image") or data.get("image") or data.get("thumbnail")
-    rating = data.get("rating")
+    image = pr.get("thumbnail") or (pr.get("thumbnails") or [None])[0]
+    rating = pr.get("rating")
     try:
         rating = float(str(rating).split()[0].replace(",", ".")) if rating else None
     except (ValueError, IndexError):
         rating = None
-    reviews = data.get("reviews_count") or data.get("ratings_total")
+    reviews = pr.get("reviews")
     try:
         reviews = int(str(reviews).replace(".", "").replace(",", "")) if reviews else None
     except ValueError:
