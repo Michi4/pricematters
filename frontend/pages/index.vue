@@ -546,7 +546,7 @@ body { margin: 0; }
 .hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
-.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: stretch; display: flex; }
+.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: flex-start; display: flex; }
 .rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
 .ad { border: none; border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; opacity: 0.55; transition: opacity 0.2s; }
 .ad:hover { opacity: 1; }
