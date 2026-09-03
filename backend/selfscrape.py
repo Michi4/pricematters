@@ -133,6 +133,16 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
 
+def _decode(data: bytes) -> str:
+    if data[:2] == b"\x1f\x8b":  # proxies sometimes pass through gzip
+        try:
+            import gzip
+            data = gzip.decompress(data)
+        except Exception:
+            pass
+    return data.decode("utf-8", errors="ignore")
+
+
 def _open(url: str, opener=None) -> str | None:
     req = urllib.request.Request(url, headers={
         "User-Agent": UA, "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
@@ -140,14 +150,14 @@ def _open(url: str, opener=None) -> str | None:
     try:
         if opener:
             with opener.open(req, timeout=12) as r:
-                html = r.read().decode("utf-8", errors="ignore")
+                html = _decode(r.read())
         else:
             with urllib.request.urlopen(req, timeout=12) as r:
-                html = r.read().decode("utf-8", errors="ignore")
+                html = _decode(r.read())
     except Exception:
         return None
-    if "Enter the characters you see" in html or len(html) < 20000:
-        return None  # captcha or block page
+    if "Enter the characters you see" in html or "Tut uns Leid" in html or len(html) < 20000:
+        return None  # captcha, bot wall, or block page
     return html
 
 
@@ -224,15 +234,13 @@ def _fetch(url: str) -> str | None:
                     _remember_good(px)
                     return html
                 continue
-            req = urllib.request.Request(url, headers={"User-Agent": UA})
-            req.set_proxy(px if "://" in px else f"http://{px}", "http")
-            req.set_proxy(px if "://" in px else f"http://{px}", "https")
-            with urllib.request.urlopen(req, timeout=12) as r:
-                html = r.read().decode("utf-8", errors="ignore")
-            if "Enter the characters you see" in html or len(html) < 20000:
-                continue
-            _remember_good(px)
-            return html
+            proxy_url = px if "://" in px else f"http://{px}"
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+            html = _open(url, opener)
+            if html:
+                _remember_good(px)
+                return html
         except Exception:
             continue
     return None
