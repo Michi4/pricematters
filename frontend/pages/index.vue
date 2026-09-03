@@ -66,7 +66,7 @@
               <h2>{{ f.title }}</h2>
               <div class="numbers">
                 <span class="price">{{ money(f.price_cents) }}</span>
-                <span v-if="faveUnit(f)" class="unitprice">{{ moneyBare(faveUnit(f).per) }} {{ sym }} / {{ faveUnit(f).base }}</span>
+                <span v-if="faveQtyLabel(f)" class="qty fave-unit">{{ faveQtyLabel(f) }}</span>
                 <span v-if="f.rating" class="qty">★ {{ f.rating }} ({{ f.reviews }})</span>
               </div>
             </div>
@@ -268,6 +268,15 @@ async function loadFaves() {
     if (data?.items?.length) favesData.value = data;
   } catch { /* SSR data stays */ }
 }
+function faveQtyLabel(f: any) {
+  // actual package unit (e.g. "1 kg", "600 ml"), not a computed unit price
+  if (f.qty?.value && f.qty?.unit) return `${fmtQty(f.qty.value)} ${f.qty.unit}`;
+  try {
+    const q = extractQuantity(f.title || '');
+    return q ? `${fmtQty(q.value)} ${q.unit}` : null;
+  } catch { return null; }
+}
+
 function faveUnit(f: any) {
   // prefer backend-provided qty (manual override), fall back to title extraction
   if (f.qty?.value && f.qty?.unit) {
@@ -546,7 +555,7 @@ body { margin: 0; }
 .hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
-.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: flex-start; display: flex; }
+.rail { width: 170px; min-width: 170px; position: sticky; top: 50vh; transform: translateY(-50%); align-self: flex-start; display: flex; }
 .rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
 .ad { border: none; border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; opacity: 0.55; transition: opacity 0.2s; }
 .ad:hover { opacity: 1; }
@@ -619,6 +628,7 @@ body { margin: 0; }
 .numbers { display: flex; gap: 1.2rem; align-items: baseline; flex-wrap: wrap; margin-bottom: 0.8rem; }
 .price { color: var(--mut); }
 .qty { color: var(--mut); font-size: 0.9rem; }
+.fave-unit { font-weight: 600; color: var(--ink); display: inline-block; min-width: 5.5rem; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
