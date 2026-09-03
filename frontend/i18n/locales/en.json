@@ -5,19 +5,12 @@
     "searchButton": "Compare",
     "searching": "Searching …",
     "popular": "Popular:",
-    "marketplace": "Store region",
-    "markets": {
-      "de": "Germany · amazon.de",
-      "at": "Austria · amazon.de",
-      "com": "USA · amazon.com",
-      "couk": "United Kingdom · amazon.co.uk",
-      "fr": "France · amazon.fr"
-    }
+    "marketplace": "Store region"
   },
   "results": {
     "count": "{n} products",
     "zone": "Prices for {zone}",
-    "zones": { "de": "Germany", "at": "Austria", "com": "USA", "couk": "United Kingdom", "fr": "France" },
+    "groups": { "eu": "Europe", "world": "Worldwide" },
     "shipNote": "Some items may not ship to your region.",
     "shipSwitch": "Switch to amazon.de",
     "pageOf": "Page {p} of {n}",

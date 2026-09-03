@@ -12,11 +12,30 @@ import urllib.parse
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 MARKETPLACES = {
+    # DACH has no .at/.ch stores: Austria & Switzerland shop on amazon.de
     "de": "www.amazon.de",
-    "at": "www.amazon.de",  # Austria uses amazon.de + same tag works
-    "com": "www.amazon.com",
-    "co.uk": "www.amazon.co.uk",
+    "at": "www.amazon.de",
+    "ch": "www.amazon.de",
     "fr": "www.amazon.fr",
+    "it": "www.amazon.it",
+    "es": "www.amazon.es",
+    "nl": "www.amazon.nl",
+    "se": "www.amazon.se",
+    "pl": "www.amazon.pl",
+    "be": "www.amazon.com.be",
+    "co.uk": "www.amazon.co.uk",
+    "ie": "www.amazon.ie",
+    "com": "www.amazon.com",
+    "ca": "www.amazon.ca",
+    "com.mx": "www.amazon.com.mx",
+    "com.br": "www.amazon.com.br",
+    "com.au": "www.amazon.com.au",
+    "co.jp": "www.amazon.co.jp",
+    "in": "www.amazon.in",
+    "ae": "www.amazon.ae",
+    "sa": "www.amazon.sa",
+    "sg": "www.amazon.sg",
+    "com.tr": "www.amazon.com.tr",
 }
 
 

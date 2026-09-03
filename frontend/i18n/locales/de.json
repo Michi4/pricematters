@@ -5,19 +5,12 @@
     "searchButton": "Vergleichen",
     "searching": "Suche …",
     "popular": "Beliebt:",
-    "marketplace": "Shop-Region",
-    "markets": {
-      "de": "Deutschland · amazon.de",
-      "at": "Österreich · amazon.de",
-      "com": "USA · amazon.com",
-      "couk": "Großbritannien · amazon.co.uk",
-      "fr": "Frankreich · amazon.fr"
-    }
+    "marketplace": "Shop-Region"
   },
   "results": {
     "count": "{n} Produkte",
     "zone": "Preise für {zone}",
-    "zones": { "de": "Deutschland", "at": "Österreich", "com": "USA", "couk": "Großbritannien", "fr": "Frankreich" },
+    "groups": { "eu": "Europa", "world": "Weltweit" },
     "shipNote": "Manches ist in deiner Region evtl. nicht lieferbar.",
     "shipSwitch": "Zu amazon.de wechseln",
     "pageOf": "Seite {p} von {n}",
@@ -75,7 +68,7 @@
   "ads": {
     "label": "Anzeige",
     "sidebar": "Dein Banner hier",
-    "sidebarSub": "Deine Zielgruppe, null Streuverlust.",
+    "sidebarSub": "Genau deine Zielgruppe. Ganz ohne Streuverlust.",
     "cta": "Platz anfragen",
     "infeed": "Dein Produkt könnte hier stehen.",
     "title": "Werbung auf PriceMatters",

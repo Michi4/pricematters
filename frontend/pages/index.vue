@@ -41,11 +41,12 @@
         <form class="search" @submit.prevent="search">
           <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus @keydown.enter.prevent="search" />
           <select v-model="marketplace" :title="t('hero.marketplace')" @change="saveMarket">
-            <option value="de">{{ t('hero.markets.de') }}</option>
-            <option value="at">{{ t('hero.markets.at') }}</option>
-            <option value="com">{{ t('hero.markets.com') }}</option>
-            <option value="co.uk">{{ t('hero.markets.couk') }}</option>
-            <option value="fr">{{ t('hero.markets.fr') }}</option>
+            <optgroup :label="t('results.groups.eu')">
+              <option v-for="m in MARKETS.filter((x) => x.group === 'eu')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
+            </optgroup>
+            <optgroup :label="t('results.groups.world')">
+              <option v-for="m in MARKETS.filter((x) => x.group === 'world')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
+            </optgroup>
           </select>
           <button type="submit">{{ pending ? t('hero.searching') : t('hero.searchButton') }}</button>
         </form>
@@ -299,13 +300,17 @@ function readCookie(name: string): string {
 function guessMarketplace(): string {
   try {
     const forced = String(route.query.marketplace || '');
-    if (['de', 'at', 'com', 'co.uk', 'fr'].includes(forced)) return forced;
+    if (CODES.includes(forced)) return forced;
     const saved = readCookie('pm_market');
-    if (['de', 'at', 'com', 'co.uk', 'fr'].includes(saved)) return saved;
+    if (CODES.includes(saved)) return saved;
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    if (/^Europe\/(Vienna|Berlin|Zurich|Luxembourg)$/i.test(tz)) return /vienna/i.test(tz) ? 'at' : 'de';
-    if (/^Europe\/(Paris|Brussels|Amsterdam|Madrid|Rome|Lisbon|Warsaw)$/i.test(tz)) return /paris/i.test(tz) ? 'fr' : 'de';
-    if (/^Europe\/London$/i.test(tz)) return 'co.uk';
+    const city = (tz.split('/')[1] || '').toLowerCase();
+    const cityMap: Record<string, string> = {
+      vienna: 'at', zurich: 'ch', berlin: 'de', paris: 'fr', london: 'co.uk',
+      madrid: 'es', rome: 'it', amsterdam: 'nl', stockholm: 'se', warsaw: 'pl',
+      brussels: 'be', dublin: 'ie', tokyo: 'co.jp',
+    };
+    if (cityMap[city]) return cityMap[city];
     if (/^America\//i.test(tz)) return 'com';
     const l = navigator.language || '';
     if (/^de-AT/i.test(l)) return 'at';
@@ -334,7 +339,7 @@ const page = ref(1);
 const perPage = ref(25);
 const userTz = ref('');
 const shipHint = computed(() => {
-  if (!['com', 'co.uk', 'fr'].includes(marketplace.value)) return false;
+  if (['de', 'at', 'ch'].includes(marketplace.value)) return false;
   try { return /^Europe\//i.test(userTz.value || Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
   catch { return false; }
 });
@@ -368,11 +373,45 @@ const popularApi = ref<string[]>([]);
 const popular = computed(() => popularApi.value.length ? popularApi.value : (locale.value === 'de'
   ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
   : ['Rice', 'Coffee', 'Protein', 'Peanut butter']));
-const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com: '$', 'co.uk': '£' };
+const MARKETS = [
+  { code: 'de', cc: 'DE', domain: 'amazon.de', group: 'eu' },
+  { code: 'at', cc: 'AT', domain: 'amazon.de', group: 'eu' },
+  { code: 'ch', cc: 'CH', domain: 'amazon.de', group: 'eu' },
+  { code: 'fr', cc: 'FR', domain: 'amazon.fr', group: 'eu' },
+  { code: 'it', cc: 'IT', domain: 'amazon.it', group: 'eu' },
+  { code: 'es', cc: 'ES', domain: 'amazon.es', group: 'eu' },
+  { code: 'nl', cc: 'NL', domain: 'amazon.nl', group: 'eu' },
+  { code: 'se', cc: 'SE', domain: 'amazon.se', group: 'eu' },
+  { code: 'pl', cc: 'PL', domain: 'amazon.pl', group: 'eu' },
+  { code: 'be', cc: 'BE', domain: 'amazon.com.be', group: 'eu' },
+  { code: 'co.uk', cc: 'GB', domain: 'amazon.co.uk', group: 'eu' },
+  { code: 'ie', cc: 'IE', domain: 'amazon.ie', group: 'eu' },
+  { code: 'com', cc: 'US', domain: 'amazon.com', group: 'world' },
+  { code: 'ca', cc: 'CA', domain: 'amazon.ca', group: 'world' },
+  { code: 'com.mx', cc: 'MX', domain: 'amazon.com.mx', group: 'world' },
+  { code: 'com.br', cc: 'BR', domain: 'amazon.com.br', group: 'world' },
+  { code: 'com.au', cc: 'AU', domain: 'amazon.com.au', group: 'world' },
+  { code: 'co.jp', cc: 'JP', domain: 'amazon.co.jp', group: 'world' },
+  { code: 'in', cc: 'IN', domain: 'amazon.in', group: 'world' },
+  { code: 'ae', cc: 'AE', domain: 'amazon.ae', group: 'world' },
+  { code: 'sa', cc: 'SA', domain: 'amazon.sa', group: 'world' },
+  { code: 'sg', cc: 'SG', domain: 'amazon.sg', group: 'world' },
+  { code: 'com.tr', cc: 'TR', domain: 'amazon.com.tr', group: 'world' },
+];
+const CODES = MARKETS.map((m) => m.code);
+const CURRENCY: Record<string, string> = {
+  de: '€', at: '€', ch: '€', fr: '€', it: '€', es: '€', nl: '€', be: '€', ie: '€',
+  se: 'kr', pl: 'zł', 'co.uk': '£', com: '$', ca: 'CA$', 'com.mx': 'MX$', 'com.br': 'R$',
+  'com.au': 'A$', 'co.jp': '¥', in: '₹', ae: 'AED', sa: 'SAR', sg: 'S$', 'com.tr': '₺',
+};
+const countryName = (cc: string) => {
+  try { return new Intl.DisplayNames([locale.value], { type: 'region' }).of(cc) || cc; }
+  catch { return cc; }
+};
 const sym = computed(() => CURRENCY[marketplace.value] || '€');
 const zoneLabel = computed(() => {
-  const key = { de: 'de', at: 'at', com: 'com', 'co.uk': 'couk', fr: 'fr' }[marketplace.value] || 'de';
-  return (tm('results.zones') as any)?.[key] || key;
+  const m = MARKETS.find((x) => x.code === marketplace.value);
+  return m ? `${countryName(m.cc)} · ${m.domain}` : marketplace.value;
 });
 const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
 const moneyBare = (cents: number) => (cents / 100).toFixed(2);

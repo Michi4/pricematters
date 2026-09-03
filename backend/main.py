@@ -194,8 +194,8 @@ def curated(marketplace: str = Query("de")):
             except RuntimeError:
                 data = {**c, "image": None, "live": False}
         tag = os.getenv("AMAZON_PARTNER_TAG", DEFAULT_TAG)
-        domain = {"de": "www.amazon.de", "at": "www.amazon.de", "com": "www.amazon.com",
-                  "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
+        from affiliate import MARKETPLACES
+        domain = MARKETPLACES.get(marketplace, "www.amazon.de")
         items.append({**data, "asin": c["asin"], "store": "Amazon",
                       "url": affiliate_url(f"https://{domain}/dp/{c['asin']}", tag, marketplace)})
     return {"items": items}

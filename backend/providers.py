@@ -22,12 +22,44 @@ from selfscrape import selfscrape_search
 
 TIMEOUT = 25
 
+# Canonical marketplace table: code -> Amazon domain, language, delivery zip,
+# site country, display currency. Switzerland/Austria use amazon.de (no .ch/.at store).
+AMAZON = {
+    "de":     {"domain": "amazon.de",     "lang": "de_DE", "zip": "10115",    "cc": "DE", "cur": "EUR"},
+    "at":     {"domain": "amazon.de",     "lang": "de_DE", "zip": "1010",     "cc": "AT", "cur": "EUR"},
+    "ch":     {"domain": "amazon.de",     "lang": "de_DE", "zip": "8001",     "cc": "CH", "cur": "EUR"},
+    "fr":     {"domain": "amazon.fr",     "lang": "fr_FR", "zip": "75001",    "cc": "FR", "cur": "EUR"},
+    "it":     {"domain": "amazon.it",     "lang": "it_IT", "zip": "00100",    "cc": "IT", "cur": "EUR"},
+    "es":     {"domain": "amazon.es",     "lang": "es_ES", "zip": "28001",    "cc": "ES", "cur": "EUR"},
+    "nl":     {"domain": "amazon.nl",     "lang": "nl_NL", "zip": "1011",     "cc": "NL", "cur": "EUR"},
+    "se":     {"domain": "amazon.se",     "lang": "sv_SE", "zip": "111 45",   "cc": "SE", "cur": "SEK"},
+    "pl":     {"domain": "amazon.pl",     "lang": "pl_PL", "zip": "00-001",   "cc": "PL", "cur": "PLN"},
+    "be":     {"domain": "amazon.com.be", "lang": "nl_NL", "zip": "1000",     "cc": "BE", "cur": "EUR"},
+    "co.uk":  {"domain": "amazon.co.uk",  "lang": "en_GB", "zip": "SW1A 1AA", "cc": "GB", "cur": "GBP"},
+    "ie":     {"domain": "amazon.ie",     "lang": "en_IE", "zip": "D01",      "cc": "IE", "cur": "EUR"},
+    "com":    {"domain": "amazon.com",    "lang": "en_US", "zip": "90210",    "cc": "US", "cur": "USD"},
+    "ca":     {"domain": "amazon.ca",     "lang": "en_CA", "zip": "M5H",      "cc": "CA", "cur": "CAD"},
+    "com.mx": {"domain": "amazon.com.mx", "lang": "es_MX", "zip": "06000",    "cc": "MX", "cur": "MXN"},
+    "com.br": {"domain": "amazon.com.br", "lang": "pt_BR", "zip": "01310",    "cc": "BR", "cur": "BRL"},
+    "com.au": {"domain": "amazon.com.au", "lang": "en_AU", "zip": "2000",     "cc": "AU", "cur": "AUD"},
+    "co.jp":  {"domain": "amazon.co.jp",  "lang": "ja_JP", "zip": "100-0001", "cc": "JP", "cur": "JPY"},
+    "in":     {"domain": "amazon.in",     "lang": "en_IN", "zip": "110001",   "cc": "IN", "cur": "INR"},
+    "ae":     {"domain": "amazon.ae",     "lang": "ar_AE", "zip": "00000",    "cc": "AE", "cur": "AED"},
+    "sa":     {"domain": "amazon.sa",     "lang": "ar_SA", "zip": "12211",    "cc": "SA", "cur": "SAR"},
+    "sg":     {"domain": "amazon.sg",     "lang": "en_SG", "zip": "018956",   "cc": "SG", "cur": "SGD"},
+    "com.tr": {"domain": "amazon.com.tr", "lang": "tr_TR", "zip": "34000",    "cc": "TR", "cur": "TRY"},
+}
+
+
+def amz(marketplace: str) -> dict:
+    return AMAZON.get(marketplace, AMAZON["de"])
+
 
 def mock_search(query: str, marketplace: str):
     # Static demo catalog on purpose: NEVER interpolate the query into titles
     # (that looks broken). meta.demo=true tells the UI to show a "Demo" badge
     # until a real provider key is configured.
-    domain = "www.amazon.de" if marketplace in ("de", "at") else f"www.amazon.{marketplace}"
+    domain = "www." + amz(marketplace)["domain"]
     return [
         ("MOCK1", "Bio Basmati Reis, 2 x 1kg", 1299, f"https://{domain}/dp/MOCK1", "Amazon", None),
         ("MOCK2", "Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings", 6499, f"https://{domain}/dp/MOCK2", "Amazon", None),
@@ -64,13 +96,12 @@ def scrapingbee_search(query: str, marketplace: str):
     key = os.getenv("SCRAPINGBEE_API_KEY", "")
     if not key:
         raise RuntimeError("SCRAPINGBEE_API_KEY not set")
-    domain = {"de": "de", "at": "de", "com": "com", "co.uk": "co.uk", "fr": "fr"}.get(marketplace, "de")
+    domain = amz(marketplace)["domain"].replace("amazon.", "")
     # ScrapingBee rule: when country matches the amazon domain, send zip_code instead
-    zips = {"de": "10115", "com": "90210", "co.uk": "SW1A 1AA", "fr": "75001"}
     data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
         "api_key": key, "query": query, "domain": domain,
-        "zip_code": zips.get(domain, "10115"), "language": "de" if domain == "de" else "en",
-        "currency": "EUR" if domain == "de" else "USD", "pages": 1,
+        "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
+        "currency": amz(marketplace)["cur"], "pages": 1,
     })
     out = []
     for p in data.get("search_results", data.get("results", [])):
@@ -89,11 +120,10 @@ def rainforest_search(query: str, marketplace: str):
     key = os.getenv("RAINFOREST_API_KEY", "")
     if not key:
         raise RuntimeError("RAINFOREST_API_KEY not set")
-    domain = {"de": "amazon.de", "at": "amazon.de", "com": "amazon.com",
-              "co.uk": "amazon.co.uk", "fr": "amazon.fr"}.get(marketplace, "amazon.de")
+    domain = amz(marketplace)["domain"]
     data = _get("https://api.rainforestapi.com/request", {
         "api_key": key, "type": "search", "amazon_domain": domain,
-        "search_term": query, "language": "de_DE" if domain == "amazon.de" else "en_US",
+        "search_term": query, "language": amz(marketplace)["lang"],
     })
     out = []
     for p in data.get("search_results", []):
@@ -111,19 +141,12 @@ def serpapi_search(query: str, marketplace: str):
     key = os.getenv("SERPAPI_API_KEY", "")
     if not key:
         raise RuntimeError("SERPAPI_API_KEY not set")
-    domain = {"de": "amazon.de", "at": "amazon.de", "com": "amazon.com",
-              "co.uk": "amazon.co.uk", "fr": "amazon.fr"}.get(marketplace, "amazon.de")
-    lang = {"amazon.de": "de_DE", "amazon.com": "en_US",
-            "amazon.co.uk": "en_GB", "amazon.fr": "fr_FR"}.get(domain, "de_DE")
-    # delivery zone per marketplace: prices AND shippability depend on it
-    zone_zip = {"de": "10115", "at": "1010", "com": "90210",
-                "co.uk": "SW1A 1AA", "fr": "75001"}.get(marketplace, "10115")
-    zone_country = {"de": "DE", "at": "AT", "com": "US",
-                    "co.uk": "GB", "fr": "FR"}.get(marketplace, "DE")
+    a = amz(marketplace)
+    domain = a["domain"]
     data = _get("https://serpapi.com/search.json", {
         "api_key": key, "engine": "amazon", "k": query,
-        "amazon_domain": domain, "language": lang,
-        "delivery_zip": zone_zip, "shipping_location": zone_country,
+        "amazon_domain": domain, "language": a["lang"],
+        "delivery_zip": a["zip"], "shipping_location": a["cc"],
     })
     if data.get("error"):
         raise RuntimeError(f"serpapi: {data['error']}")
@@ -181,8 +204,7 @@ def zenrows_search(query: str, marketplace: str):
     key = os.getenv("ZENROWS_API_KEY", "")
     if not key:
         raise RuntimeError("ZENROWS_API_KEY not set")
-    domain = {"de": "www.amazon.de", "at": "www.amazon.de", "com": "www.amazon.com",
-              "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
+    domain = "www." + amz(marketplace)["domain"]
     target = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
     try:
         # premium_proxy (residential) beats Amazon's bot manager; plain datacenter IPs get challenged
@@ -207,7 +229,9 @@ def keepa_history(asin: str, marketplace: str = "de"):
     key = os.getenv("KEEPA_API_KEY", "")
     if not key:
         raise RuntimeError("KEEPA_API_KEY not set")
-    domain_id = {"de": 3, "at": 3, "com": 1, "co.uk": 2, "fr": 4}.get(marketplace, 3)
+    domain_id = {"de": 3, "at": 3, "ch": 3, "fr": 4, "it": 8, "es": 9,
+                 "co.uk": 2, "com": 1, "ca": 6, "co.jp": 5, "in": 10,
+                 "com.mx": 11, "com.br": 12}.get(marketplace, 3)
     return _get("https://api.keepa.com/product", {
         "key": key, "domain": domain_id, "asin": asin, "history": 1,
     })
@@ -230,9 +254,8 @@ PROVIDERS = {
     "creators": creators_search,
 }
 
-# delivery zone labels shown in the UI (prices depend on the region!)
-ZONES = {"de": "10115 Berlin", "at": "1010 Wien", "com": "90210 Beverly Hills",
-         "co.uk": "SW1A 1AA London", "fr": "75001 Paris"}
+# delivery zone labels (reference; the UI localizes marketplace codes itself)
+ZONES = {"de": "Deutschland", "at": "Österreich", "ch": "Schweiz"}
 
 # cheapest-first default chain (free tiers before paid before experimental)
 DEFAULT_CHAIN = ["zenrows", "serpapi", "scrapingbee", "rainforest", "selfscrape", "mock"]

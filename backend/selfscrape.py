@@ -249,8 +249,9 @@ def _fetch(url: str) -> str | None:
 def selfscrape_search(query: str, marketplace: str):
     if not _enabled():
         raise RuntimeError("SELFSCRAPE_CONSENT=1 not set — enable explicitly (see selfscrape.py header).")
-    domain = {"de": "www.amazon.de", "at": "www.amazon.de", "com": "www.amazon.com",
-              "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
+    from amazon_parse import parse_search
+    from providers import amz
+    domain = "www." + amz(marketplace)["domain"]
     url = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
     html = _fetch(url)
     if not html:
