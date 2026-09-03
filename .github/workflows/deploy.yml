@@ -20,4 +20,11 @@ jobs:
             git pull --ff-only
             cp -n .env.example .env || true
             docker compose up -d --build
-            docker compose exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=20).read().decode())"
+            # backend needs a few seconds after recreate — retry instead of failing CI
+            for i in $(seq 1 12); do
+              if docker compose exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=10).read().decode())" 2>/dev/null; then
+                exit 0
+              fi
+              sleep 10
+            done
+            echo "backend health check failed"; docker compose ps; exit 1
