@@ -63,7 +63,7 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload
   1. Finish PartnerNet registration as **"Comparison Shopping Engine
      (Preissuchmaschine)"** with the Grundpreis/Mehrwert-text (no words like
      "exposing Amazon", "scraping" — instant reject).
-  2. Take your `PartnerTag` (e.g. `michi4r-21`) and hard-code it into every
+  2. Take your `PartnerTag` (e.g. `websters02-21`) and hard-code it into every
      outbound link **today** (already done in `server/api/search.get.ts`).
   3. Ship the MVP with mock data + affiliate links, share with family/HTL circle,
      drive the first 10 sales of daily goods (coffee, rice, whey) — that's what

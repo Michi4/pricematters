@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const marketplace = ((query.marketplace as string) || 'de').trim();
   if (!q) return { items: [], meta: {} };
   const config = useRuntimeConfig();
-  const tag = config.public.affiliateTag || 'michi4r-21';
+  const tag = config.public.affiliateTag || 'websters02-21';
 
   try {
     const backend = await $fetch(`${config.backendUrl}/search`, { query: { q, marketplace } }) as any;

@@ -1,7 +1,7 @@
 """Affiliate link builder — the important insight:
 
 Commission does NOT need any API approval. Your PartnerNet PartnerTag
-(e.g. michi4r-21) in the URL is enough for the 24h cookie + commission.
+(e.g. websters02-21) in the URL is enough for the 24h cookie + commission.
 Only *product data* (titles/prices via API) needs Creators API approval.
 
 Same for other shops: Awin deeplinks just wrap the merchant URL, no API call.

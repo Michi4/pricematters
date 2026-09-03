@@ -14,7 +14,7 @@ from providers import PROVIDERS
 from translate import query_variants
 
 app = FastAPI(title="PriceMatters API")
-DEFAULT_TAG = "michi4r-21"
+DEFAULT_TAG = "websters02-21"
 
 
 def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, marketplace: str) -> dict:
