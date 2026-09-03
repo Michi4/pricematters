@@ -37,23 +37,25 @@ IDX = ["CREATE INDEX IF NOT EXISTS events_kind_ts ON events (kind, ts)",
        "CREATE INDEX IF NOT EXISTS events_ts ON events (ts)"]
 
 
+COLS = ["kind", "query", "marketplace", "result_count", "ipd", "country", "lang",
+        "tz", "device", "w", "asin", "store", "pos", "title", "price_cents", "ms", "ref"]
+
+
 def track(payload: dict) -> bool:
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
         if not url:
             return False
-        p = {k: (str(v)[:180] if v is not None else None) for k, v in payload.items()}
+        p = {c: payload.get(c) for c in COLS}
+        p = {k: (str(v)[:180] if v is not None else None) for k, v in p.items()}
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
             cur.execute(DDL)
             for stmt in IDX:
                 cur.execute(stmt)
-            cur.execute(
-                """INSERT INTO events (kind, query, marketplace, result_count, ipd, country,
-                   lang, tz, device, w, asin, store, pos, title, price_cents, ms, ref)
-                   VALUES (%(kind)s,%(query)s,%(marketplace)s,%(result_count)s,%(ipd)s,%(country)s,
-                   %(lang)s,%(tz)s,%(device)s,%(w)s,%(asin)s,%(store)s,%(pos)s,%(title)s,%(price_cents)s,%(ms)s,%(ref)s)""",
-                p)
+            cols = ", ".join(COLS)
+            marks = ", ".join(f"%({c})s" for c in COLS)
+            cur.execute(f"INSERT INTO events ({cols}) VALUES ({marks})", p)
         return True
     except Exception as e:
         print(f"[track] {e}", flush=True)
