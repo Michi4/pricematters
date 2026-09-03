@@ -257,12 +257,14 @@ function applyTheme(t: string) {
 function toggleTheme() {
   applyTheme(theme.value === 'dark' ? 'light' : 'dark');
 }
-const faves = ref<any[]>([]);
+const { data: favesData } = await useAsyncData('faves', () =>
+  $fetch('/api/curated', { query: { marketplace: 'de' } }).catch(() => ({ items: [] })));
+const faves = computed(() => (favesData.value as any)?.items || []);
 async function loadFaves() {
   try {
     const data = await $fetch('/api/curated', { query: { marketplace: marketplace.value } }) as any;
-    faves.value = data?.items || [];
-  } catch { /* section stays hidden */ }
+    if (data?.items?.length) favesData.value = data;
+  } catch { /* SSR data stays */ }
 }
 function faveUnit(f: any) {
   try {
@@ -535,7 +537,7 @@ body { margin: 0; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }
 .hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
-.layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; }
+.layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: stretch; display: flex; }
 .rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
