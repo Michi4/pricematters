@@ -102,11 +102,15 @@ def extract(title: str = Query(...), description: str = ""):
 def search(request: Request, q: str = Query(...), marketplace: str = Query("de"),
            provider: str | None = Query(None), stores: str = Query("all"),
            lang: str = Query(""), tz: str = Query(""), w: int = Query(0)):
+    # BIO = bio = Bio: searches & cache keys are case-insensitive,
+    # display keeps the user's casing
+    q = " ".join(q.split())
+    ql = q.lower()
     wait = _rate_retry_after(request)
     if wait:
         try:
             from track import ip_hash, track
-            track({"kind": "rate_limited", "query": q, "marketplace": marketplace,
+            track({"kind": "rate_limited", "query": ql, "marketplace": marketplace,
                    "ipd": ip_hash(_client_ip(request)), "w": w})
         except Exception:
             pass
@@ -125,7 +129,7 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
     if not chain:
         return {"items": [], "meta": {"chain": chain}, "error": "no known provider in chain"}
     meta: dict = {"chain": chain, "feed_shops": "skipped",
-                  "demo": chain == ["mock"], "queries": [q]}
+                  "demo": chain == ["mock"], "queries": [ql]}
     try:
         from providers import ZONES  # noqa (zone labels documented there)
         meta["zone"] = marketplace
@@ -140,7 +144,7 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
     used = "mock"
     rows: list = []
     for cand in chain:
-        ckey = f"{CACHE_VERSION}:{cand}:{marketplace}:{q}"
+        ckey = f"{CACHE_VERSION}:{cand}:{marketplace}:{ql}"
         cached = cache_get(ckey) if cand != "mock" else None
         if cached:
             rows, age, hits = cached
@@ -148,7 +152,7 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
             used = cand
             break
         try:
-            variants = query_variants(q, marketplace) if cand != "mock" else [q]
+            variants = query_variants(ql, marketplace) if cand != "mock" else [ql]
             meta["queries"] = variants
             rows = []
             for v in variants:
@@ -193,7 +197,7 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
             meta["feed_shops"] = str(e)
 
     items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
-    log_search(q, marketplace, len(items))
+    log_search(ql, marketplace, len(items))
     return {"items": items, "meta": meta}
 
 

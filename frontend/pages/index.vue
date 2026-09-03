@@ -79,8 +79,10 @@
               </div>
             </div>
           </div>
-          <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`">{{ t('results.atAmazon') }}</a>
-          <span class="paid">{{ t('results.paidLink') }}</span>
+          <div class="card-actions">
+            <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`">{{ t('results.atAmazon') }}</a>
+            <span class="paid">{{ t('results.paidLink') }}</span>
+          </div>
         </article>
       </section>
 
@@ -183,10 +185,12 @@
           </div>
             </div>
           </div>
-          <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`">
-            {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
-          </a>
-          <span class="paid">{{ t('results.paidLink') }}</span>
+          <div class="card-actions">
+            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`">
+              {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
+            </a>
+            <span class="paid">{{ t('results.paidLink') }}</span>
+          </div>
         </article>
         <div v-if="i === 1 && sorted.length > 3" class="ad infeed">
           <span class="ad-label">{{ t('ads.label') }}</span>
@@ -736,8 +740,9 @@ html { scrollbar-gutter: stable; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
+.card-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
 .card-body > .numbers { contain: inline-size; }
-.paid { color: var(--mut); font-size: 0.75rem; margin-left: 0.6rem; }
+.paid { color: var(--mut); font-size: 0.75rem; margin-left: auto; }
 .marketing { text-align: center; padding: 1rem 0; }
 .mut { color: var(--mut); }
 .steps, .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }

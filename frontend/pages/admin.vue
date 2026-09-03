@@ -1,16 +1,14 @@
 <template>
   <div class="adm">
     <header class="top">
-      <NuxtLink to="/" class="logo">
-        <img src="/logo.svg" alt="" width="28" height="28" />
-        <span>Admin Stats</span>
+      <NuxtLink :to="localePath('/')" class="logo">
+        <img src="/logo.svg" alt="logo" width="28" height="28" />
+        <span>{{ brandName }}</span>
       </NuxtLink>
     </header>
 
     <main>
       <section v-if="!unlocked" class="gate">
-        <h1>Websters Stats</h1>
-        <p class="mut">First-party analytics. Access key only for Websters e.U.</p>
         <form @submit.prevent="unlock">
           <input v-model="key" type="password" placeholder="Admin Key" autofocus autocomplete="off" />
           <button type="submit">Open</button>
@@ -146,7 +144,16 @@
 </template>
 
 <script setup lang="ts">
-useSeoMeta({ title: 'Websters Stats', robots: 'noindex, nofollow' });
+useSeoMeta({ title: 'PriceMatters', robots: 'noindex, nofollow' });
+
+const appConfig = useAppConfig() as any;
+const host = useRequestURL().host;
+const brandName = computed(() => {
+  const brands = appConfig.brands as Record<string, any>;
+  const aliases = (appConfig.aliases as Record<string, string>) || {};
+  return brands[aliases[host] || host]?.name || brands.default?.name || 'PriceMatters';
+});
+const localePath = useLocalePath();
 
 const key = ref('');
 const unlocked = ref(false);
