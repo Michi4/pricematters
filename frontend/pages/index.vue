@@ -72,6 +72,7 @@
             </div>
           </div>
           <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta">{{ t('results.atAmazon') }}</a>
+          <span class="paid">{{ t('results.paidLink') }}</span>
         </article>
       </section>
 
@@ -160,6 +161,7 @@
           <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta">
             {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
           </a>
+          <span class="paid">{{ t('results.paidLink') }}</span>
         </article>
         <div v-if="i === 1 && sorted.length > 3" class="ad infeed">
           <span class="ad-label">{{ t('ads.label') }}</span>
@@ -267,6 +269,11 @@ async function loadFaves() {
   } catch { /* SSR data stays */ }
 }
 function faveUnit(f: any) {
+  // prefer backend-provided qty (manual override), fall back to title extraction
+  if (f.qty?.value && f.qty?.unit) {
+    const per = unitPrice(f.price_cents, { value: f.qty.value, unit: f.qty.unit, kind: 'count' });
+    if (per) return per;
+  }
   try {
     const qty = extractQuantity(f.title || '');
     return qty ? unitPrice(f.price_cents, qty) : null;
@@ -615,6 +622,7 @@ body { margin: 0; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
+.paid { color: var(--mut); font-size: 0.75rem; margin-left: 0.6rem; }
 .marketing { text-align: center; padding: 1rem 0; }
 .mut { color: var(--mut); }
 .steps, .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }

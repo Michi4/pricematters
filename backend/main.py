@@ -157,15 +157,15 @@ def cache_stats():
 # Static fallback = his real products/prices; live SerpApi data whenever possible.
 CURATED = [
     {"asin": "B08NCPB1SM", "title": "Volksshake Veganes Protein Schoko, 1000g",
-     "price_cents": 2878, "rating": 4.0, "reviews": 267},
+     "price_cents": 2878, "rating": 4.0, "reviews": 267, "qty_value": 1, "qty_unit": "kg"},
     {"asin": "B00I5ABIFI", "title": "WMF Kult X Mix & Go Mini Smoothie Maker, 0,6l",
-     "price_cents": 3024, "rating": 4.5, "reviews": 36822},
+     "price_cents": 3024, "rating": 4.5, "reviews": 36822, "qty_value": 1, "qty_unit": "pcs"},
     {"asin": "B0D9H7PLK4", "title": "UGREEN LAN Switch Gigabit, 8-Port",
-     "price_cents": 1410, "rating": 4.7, "reviews": 1710},
+     "price_cents": 1410, "rating": 4.7, "reviews": 1710, "qty_value": 1, "qty_unit": "pcs"},
     {"asin": "B08HVR86TR", "title": "Oclean X Pro Schallzahnbürste, Dunkellila",
-     "price_cents": 6509, "rating": 3.7, "reviews": 1060},
+     "price_cents": 6509, "rating": 3.7, "reviews": 1060, "qty_value": 1, "qty_unit": "pcs"},
     {"asin": "B09B836TTQ", "title": "Corsair HS80 RGB Wireless Gaming-Headset, Carbon",
-     "price_cents": 10084, "rating": 4.1, "reviews": 5704},
+     "price_cents": 10084, "rating": 4.1, "reviews": 5704, "qty_value": 1, "qty_unit": "pcs"},
 ]
 
 
@@ -186,8 +186,9 @@ def curated(marketplace: str = Query("de")):
                     "title": live["title"] or c["title"],
                     "price_cents": live["price_cents"] or c["price_cents"],
                     "image": live["image"],
-                    "rating": live["rating"] or c["rating"],
-                    "reviews": live["reviews"] or c["reviews"],
+                    # sanity: live rating shouldn't differ wildly from static
+                    "rating": live["rating"] if live["rating"] and abs(live["rating"] - c["rating"]) < 2.0 else c["rating"],
+                    "reviews": live["reviews"] if live["reviews"] and live["reviews"] > c["reviews"] * 0.5 else c["reviews"],
                     "live": True,
                 }
                 cache_store(key, data, f"{c['asin']}:{data['price_cents']}")
@@ -197,6 +198,7 @@ def curated(marketplace: str = Query("de")):
         from affiliate import MARKETPLACES
         domain = MARKETPLACES.get(marketplace, "www.amazon.de")
         items.append({**data, "asin": c["asin"], "store": "Amazon",
+                      "qty": {"value": c.get("qty_value", 1), "unit": c.get("qty_unit", "pcs"), "kind": "count"},
                       "url": affiliate_url(f"https://{domain}/dp/{c['asin']}", tag, marketplace)})
     return {"items": items}
 

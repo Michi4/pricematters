@@ -22,6 +22,7 @@
     "per": "pro",
     "viewDeal": "Ansehen",
     "atAmazon": "Bei Amazon ansehen",
+    "paidLink": "(Werbelink)",
     "atShop": "Zum Shop",
     "sort": {
       "label": "Sortieren",
@@ -45,7 +46,7 @@
     "store": { "all": "Alle", "label": "Shops" }
   },
   "faves": {
-    "title": "Michis Favoriten",
+    "title": "Meine Favs",
     "sub": "Echte Produkte, die ich selbst nutze — ohne Ranking, einfach gut."
   },
   "how": {

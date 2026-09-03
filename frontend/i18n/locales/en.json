@@ -22,6 +22,7 @@
     "per": "per",
     "viewDeal": "View",
     "atAmazon": "View on Amazon",
+    "paidLink": "(paid link)",
     "atShop": "Go to shop",
     "sort": {
       "label": "Sort",
@@ -45,7 +46,7 @@
     "store": { "all": "All", "label": "Shops" }
   },
   "faves": {
-    "title": "Michi's favorites",
+    "title": "My Favs",
     "sub": "Real products I use myself — no ranking, just good."
   },
   "how": {
