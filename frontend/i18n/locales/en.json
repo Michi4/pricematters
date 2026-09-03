@@ -17,6 +17,7 @@
   "results": {
     "count": "{n} products",
     "zone": "Prices for {zone}",
+    "zones": { "de": "Germany", "at": "Austria", "com": "USA", "couk": "United Kingdom", "fr": "France" },
     "shipNote": "Some items may not ship to your region.",
     "shipSwitch": "Switch to amazon.de",
     "pageOf": "Page {p} of {n}",
@@ -49,6 +50,10 @@
       "kinds": { "all": "All", "mass": "Weight (kg, g)", "volume": "Volume (L, mL)", "count": "Count", "storage": "Storage (GB, TB)" }
     },
     "store": { "all": "All", "label": "Shops" }
+  },
+  "faves": {
+    "title": "Michi's favorites",
+    "sub": "Real products I use myself — no ranking, just good."
   },
   "how": {
     "title": "How it works",

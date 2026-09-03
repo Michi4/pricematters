@@ -9,7 +9,7 @@ Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 import os
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
-from affiliate import monetize
+from affiliate import monetize, affiliate_url
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
 from translate import query_variants
@@ -77,8 +77,8 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
     meta: dict = {"chain": chain, "feed_shops": "skipped",
                   "demo": chain == ["mock"], "queries": [q]}
     try:
-        from providers import ZONES
-        meta["zone"] = ZONES.get(marketplace, "")
+        from providers import ZONES  # noqa (zone labels documented there)
+        meta["zone"] = marketplace
     except ImportError:
         pass
     name = chain[0]
@@ -151,6 +151,54 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
 def cache_stats():
     from cache import stats
     return stats()
+
+
+# Michi's personal favorites on the front page (no ranking, just love).
+# Static fallback = his real products/prices; live SerpApi data whenever possible.
+CURATED = [
+    {"asin": "B08NCPB1SM", "title": "Volksshake Veganes Protein Schoko, 1000g",
+     "price_cents": 2878, "rating": 4.0, "reviews": 267},
+    {"asin": "B00I5ABIFI", "title": "WMF Kult X Mix & Go Mini Smoothie Maker, 0,6l",
+     "price_cents": 3024, "rating": 4.5, "reviews": 36822},
+    {"asin": "B0D9H7PLK4", "title": "UGREEN LAN Switch Gigabit, 8-Port",
+     "price_cents": 1410, "rating": 4.7, "reviews": 1710},
+    {"asin": "B08HVR86TR", "title": "Oclean X Pro Schallzahnbürste, Dunkellila",
+     "price_cents": 6509, "rating": 3.7, "reviews": 1060},
+    {"asin": "B09B836TTQ", "title": "Corsair HS80 RGB Wireless Gaming-Headset, Carbon",
+     "price_cents": 10084, "rating": 4.1, "reviews": 5704},
+]
+
+
+@app.get("/curated")
+def curated(marketplace: str = Query("de")):
+    from cache import get as cache_get, store as cache_store
+    from providers import serpapi_product
+    items = []
+    for c in CURATED:
+        key, data = f"v2:curated:{c['asin']}", None
+        hit = cache_get(key)
+        if hit:
+            data, _age, _hits = hit
+        else:
+            try:
+                live = serpapi_product(c["asin"])
+                data = {
+                    "title": live["title"] or c["title"],
+                    "price_cents": live["price_cents"] or c["price_cents"],
+                    "image": live["image"],
+                    "rating": live["rating"] or c["rating"],
+                    "reviews": live["reviews"] or c["reviews"],
+                    "live": True,
+                }
+                cache_store(key, data, f"{c['asin']}:{data['price_cents']}")
+            except RuntimeError:
+                data = {**c, "image": None, "live": False}
+        tag = os.getenv("AMAZON_PARTNER_TAG", DEFAULT_TAG)
+        domain = {"de": "www.amazon.de", "at": "www.amazon.de", "com": "www.amazon.com",
+                  "co.uk": "www.amazon.co.uk", "fr": "www.amazon.fr"}.get(marketplace, "www.amazon.de")
+        items.append({**data, "asin": c["asin"], "store": "Amazon",
+                      "url": affiliate_url(f"https://{domain}/dp/{c['asin']}", tag, marketplace)})
+    return {"items": items}
 
 
 class Contact(BaseModel):

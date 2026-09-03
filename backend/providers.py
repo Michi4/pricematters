@@ -144,6 +144,37 @@ def serpapi_search(query: str, marketplace: str):
     return out
 
 
+def serpapi_product(asin: str, domain: str = "amazon.de"):
+    """Single product by ASIN (SerpApi amazon_product engine). Defensive: {} on miss."""
+    key = os.getenv("SERPAPI_API_KEY", "")
+    if not key:
+        raise RuntimeError("SERPAPI_API_KEY not set")
+    data = _get("https://serpapi.com/search.json", {
+        "api_key": key, "engine": "amazon_product", "asin": asin,
+        "amazon_domain": domain,
+        "language": "de_DE" if domain == "amazon.de" else "en_US",
+    })
+    if data.get("error"):
+        raise RuntimeError(f"serpapi: {data['error']}")
+    title = data.get("title") or data.get("product_title") or data.get("name") or ""
+    price = data.get("price")
+    if isinstance(price, dict):
+        price = price.get("extracted") or price.get("value") or price.get("raw")
+    image = data.get("main_image") or data.get("image") or data.get("thumbnail")
+    rating = data.get("rating")
+    try:
+        rating = float(str(rating).split()[0].replace(",", ".")) if rating else None
+    except (ValueError, IndexError):
+        rating = None
+    reviews = data.get("reviews_count") or data.get("ratings_total")
+    try:
+        reviews = int(str(reviews).replace(".", "").replace(",", "")) if reviews else None
+    except ValueError:
+        reviews = None
+    return {"title": title, "price_cents": _price_to_cents(price),
+            "image": image, "rating": rating, "reviews": reviews}
+
+
 def zenrows_search(query: str, marketplace: str):
     """Zenrows universal scrape (free tier) of the Amazon search page + shared parser."""
     key = os.getenv("ZENROWS_API_KEY", "")

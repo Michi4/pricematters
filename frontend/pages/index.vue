@@ -54,6 +54,26 @@
         </p>
       </section>
 
+      <section v-if="faves.length && !searched" class="faves">
+        <h2>{{ t('faves.title') }}</h2>
+        <p class="mut">{{ t('faves.sub') }}</p>
+        <article v-for="f in faves" :key="f.asin" class="card">
+          <div class="card-main">
+            <img v-if="f.image" :src="f.image" :alt="f.title" loading="lazy" class="thumb" />
+            <div v-else class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
+            <div class="card-body">
+              <h2>{{ f.title }}</h2>
+              <div class="numbers">
+                <span class="price">{{ money(f.price_cents) }}</span>
+                <span v-if="faveUnit(f)" class="unitprice">{{ moneyBare(faveUnit(f).per) }} {{ sym }} / {{ faveUnit(f).base }}</span>
+                <span v-if="f.rating" class="qty">★ {{ f.rating }} ({{ f.reviews }})</span>
+              </div>
+            </div>
+          </div>
+          <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta">{{ t('results.atAmazon') }}</a>
+        </article>
+      </section>
+
       <section v-if="searched" class="results">
         <div class="meta-row">
           <span>{{ t('results.count', { n: sorted.length }) }}</span>
@@ -61,7 +81,7 @@
           <span v-if="meta.queries?.length > 1" class="also">
             {{ t('results.alsoSearched') }} {{ meta.queries.slice(1).join(', ') }}
           </span>
-          <span v-if="meta.zone" class="zone">{{ t('results.zone', { zone: meta.zone }) }}</span>
+          <span v-if="meta.zone" class="zone">{{ t('results.zone', { zone: zoneLabel }) }}</span>
           <span v-if="shipHint" class="ship">
             {{ t('results.shipNote') }}
             <button class="linklike" @click="marketplace = 'de'; saveMarket(); search()">{{ t('results.shipSwitch') }}</button>
@@ -205,11 +225,11 @@
 </template>
 
 <script setup lang="ts">
-import { convertPer, DISPLAY_TARGETS } from '../lib/units';
+import { convertPer, DISPLAY_TARGETS, extractQuantity, unitPrice } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
-const { t, locale, locales } = useI18n();
+const { t, tm, locale, locales } = useI18n();
 const localePath = useLocalePath();
 const switchLocalePath = useSwitchLocalePath();
 const route = useRoute();
@@ -235,6 +255,19 @@ function applyTheme(t: string) {
 }
 function toggleTheme() {
   applyTheme(theme.value === 'dark' ? 'light' : 'dark');
+}
+const faves = ref<any[]>([]);
+async function loadFaves() {
+  try {
+    const data = await $fetch('/api/curated', { query: { marketplace: marketplace.value } }) as any;
+    faves.value = data?.items || [];
+  } catch { /* section stays hidden */ }
+}
+function faveUnit(f: any) {
+  try {
+    const qty = extractQuantity(f.title || '');
+    return qty ? unitPrice(f.price_cents, qty) : null;
+  } catch { return null; }
 }
 async function loadPopular() {
   try {
@@ -337,6 +370,10 @@ const popular = computed(() => popularApi.value.length ? popularApi.value : (loc
   : ['Rice', 'Coffee', 'Protein', 'Peanut butter']));
 const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com: '$', 'co.uk': '£' };
 const sym = computed(() => CURRENCY[marketplace.value] || '€');
+const zoneLabel = computed(() => {
+  const key = { de: 'de', at: 'at', com: 'com', 'co.uk': 'couk', fr: 'fr' }[marketplace.value] || 'de';
+  return (tm('results.zones') as any)?.[key] || key;
+});
 const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
 const moneyBare = (cents: number) => (cents / 100).toFixed(2);
 // quantities: max 2 decimals, no float artifacts (2721.551999999997 -> 2721.55)
@@ -353,7 +390,9 @@ async function search() {
     searched.value = true;
     storeFilter.value = 'all';
     page.value = 1;
-    loadPopular();
+  loadPopular();
+  loadFaves();
+  watch(marketplace, () => { loadFaves(); loadPopular(); });
     // sensible default display unit from result kinds
     const bases = new Set(results.value.map((r: any) => r.unitPrice?.base));
     displayUnit.value = bases.has('kg') ? 'kg' : bases.has('l') ? 'l' : bases.has('pcs') ? 'pcs' : 'kg';

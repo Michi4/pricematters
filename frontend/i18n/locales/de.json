@@ -17,6 +17,7 @@
   "results": {
     "count": "{n} Produkte",
     "zone": "Preise für {zone}",
+    "zones": { "de": "Deutschland", "at": "Österreich", "com": "USA", "couk": "Großbritannien", "fr": "Frankreich" },
     "shipNote": "Manches ist in deiner Region evtl. nicht lieferbar.",
     "shipSwitch": "Zu amazon.de wechseln",
     "pageOf": "Seite {p} von {n}",
@@ -49,6 +50,10 @@
       "kinds": { "all": "Alles", "mass": "Gewicht (kg, g)", "volume": "Volumen (l, ml)", "count": "Stückzahl", "storage": "Speicher (GB, TB)" }
     },
     "store": { "all": "Alle", "label": "Shops" }
+  },
+  "faves": {
+    "title": "Michis Favoriten",
+    "sub": "Echte Produkte, die ich selbst nutze — ohne Ranking, einfach gut."
   },
   "how": {
     "title": "So funktioniert's",
