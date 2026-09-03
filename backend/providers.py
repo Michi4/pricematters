@@ -65,9 +65,11 @@ def scrapingbee_search(query: str, marketplace: str):
     if not key:
         raise RuntimeError("SCRAPINGBEE_API_KEY not set")
     domain = {"de": "de", "at": "de", "com": "com", "co.uk": "co.uk", "fr": "fr"}.get(marketplace, "de")
+    # ScrapingBee rule: when country matches the amazon domain, send zip_code instead
+    zips = {"de": "10115", "com": "90210", "co.uk": "SW1A 1AA", "fr": "75001"}
     data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
         "api_key": key, "query": query, "domain": domain,
-        "country": "de" if domain == "de" else "us", "language": "de" if domain == "de" else "en",
+        "zip_code": zips.get(domain, "10115"), "language": "de" if domain == "de" else "en",
         "currency": "EUR" if domain == "de" else "USD", "pages": 1,
     })
     out = []
