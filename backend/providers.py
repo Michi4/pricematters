@@ -23,11 +23,14 @@ TIMEOUT = 25
 
 
 def mock_search(query: str, marketplace: str):
+    # Static demo catalog on purpose: NEVER interpolate the query into titles
+    # (that looks broken). meta.demo=true tells the UI to show a "Demo" badge
+    # until a real provider key is configured.
     domain = "www.amazon.de" if marketplace in ("de", "at") else f"www.amazon.{marketplace}"
     return [
-        ("MOCK1", f"Bio Basmati Reis, 2 x 1kg ({query})", 1299, f"https://{domain}/dp/MOCK1", "Amazon"),
-        ("MOCK2", f"Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings ({query})", 6499, f"https://{domain}/dp/MOCK2", "Amazon"),
-        ("MOCK3", f"Bio Kaffee Bohnen 500g ({query})", 899, f"https://{domain}/dp/MOCK3", "Amazon"),
+        ("MOCK1", "Bio Basmati Reis, 2 x 1kg", 1299, f"https://{domain}/dp/MOCK1", "Amazon"),
+        ("MOCK2", "Optimum Whey Double Rich Chocolate 2.27kg (5 lbs), 71 Servings", 6499, f"https://{domain}/dp/MOCK2", "Amazon"),
+        ("MOCK3", "Bio Kaffee Bohnen 500g", 899, f"https://{domain}/dp/MOCK3", "Amazon"),
     ]
 
 

@@ -106,3 +106,22 @@ export function unitPrice(priceCents: number, qty: ExtractedQty): { per: number;
   // value is in qty.unit; convert: price per `base` = price / value * mult
   return { per: (priceCents / qty.value) * c.mult, base: c.base };
 }
+
+// Display targets for the UI unit selector (€/kg vs €/100g vs €/l …)
+export const DISPLAY_TARGETS = [
+  { id: 'kg', bases: ['kg'] },
+  { id: '100g', bases: ['kg'] },
+  { id: 'l', bases: ['l'] },
+  { id: '100ml', bases: ['l'] },
+  { id: 'pcs', bases: ['pcs'] },
+  { id: 'gb', bases: ['gb', 'tb', 'mb'] },
+] as const;
+
+export function convertPer(per: number, base: string, target: string): number | null {
+  if (target === base) return per;
+  if (base === 'kg' && target === '100g') return per / 10;
+  if (base === 'l' && target === '100ml') return per / 10;
+  if (base === 'tb' && target === 'gb') return per / 1000;
+  if (base === 'mb' && target === 'gb') return per / 1000;
+  return null;
+}

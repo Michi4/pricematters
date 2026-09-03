@@ -1,0 +1,71 @@
+{
+  "header": { "tagline": "The honest price comparison" },
+  "hero": {
+    "searchPlaceholder": "Rice, coffee, protein, peanut butter …",
+    "searchButton": "Compare",
+    "searching": "Searching …",
+    "popular": "Popular:",
+    "marketplace": "Store region"
+  },
+  "results": {
+    "count": "{n} products",
+    "alsoSearched": "Also searched:",
+    "demo": "Demo data – live prices kick in once a data key is configured.",
+    "empty": "Nothing found. Try another term – e.g. in German.",
+    "best": "Best deal",
+    "per": "per",
+    "viewDeal": "View",
+    "atAmazon": "View on Amazon",
+    "atShop": "Go to shop",
+    "sort": {
+      "label": "Sort",
+      "unit": "Unit price (cheapest first)",
+      "priceAsc": "Price ascending",
+      "priceDesc": "Price descending",
+      "name": "Name A–Z"
+    },
+    "unit": { "label": "Show as" },
+    "store": { "all": "All", "label": "Shops" }
+  },
+  "cats": {
+    "title": "Or browse by category",
+    "items": [
+      { "label": "☕ Coffee & Tea", "q": "Coffee" },
+      { "label": "🍚 Rice & Grains", "q": "Rice" },
+      { "label": "💪 Protein & Fitness", "q": "Protein" },
+      { "label": "🥜 Peanut butter", "q": "Peanut butter" },
+      { "label": "🧴 Drugstore", "q": "Shampoo" },
+      { "label": "💾 SSD & Storage", "q": "SSD 1TB" }
+    ]
+  },
+  "example": {
+    "title": "What a comparison looks like",
+    "note": "Example – real unit-price math, no moon prices.",
+    "items": [
+      { "t": "Organic Basmati Rice, 2 x 1kg", "price": 1299, "qty": "2 kg", "per": 650, "base": "kg", "best": true },
+      { "t": "Premium Long-Grain Rice, 500g", "price": 499, "qty": "500 g", "per": 998, "base": "kg", "best": false },
+      { "t": "Organic Coffee Beans, 500g", "price": 899, "qty": "500 g", "per": 1798, "base": "kg", "best": false }
+    ]
+  },
+  "how": {
+    "title": "How it works",
+    "s1t": "Search",
+    "s1d": "Type a product – we search Amazon & partner shops, in English and German.",
+    "s2t": "See unit prices",
+    "s2d": "We extract the real quantity from every title (kg, litres, pieces) and compute the price per unit.",
+    "s3t": "Buy cheapest",
+    "s3d": "Sorted by true unit price – no ads, no fake discounts, no recommendation tricks."
+  },
+  "trust": {
+    "t1": "No ads",
+    "d1": "Results are never bought.",
+    "t2": "Real unit prices",
+    "d2": "€/kg instead of moon prices.",
+    "t3": "Free",
+    "d3": "Forever, no account needed."
+  },
+  "footer": {
+    "disclosure": "As an Amazon Associate we earn from qualifying purchases – at no extra cost to you.",
+    "made": "Built with ♥ in Austria."
+  }
+}

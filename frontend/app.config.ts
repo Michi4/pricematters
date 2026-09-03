@@ -1,26 +1,53 @@
 // Multi-brand: ONE docker image, N domains.
-// The layout reads window.location.hostname and picks the brand below.
+// The page reads the hostname (SSR-safe) and picks brand + rotating slogans.
+// app.config.ts
 export default defineAppConfig({
   brands: {
     'pricematters.app': {
       name: 'PriceMatters',
-      sloganEN: "Because unlike size, pricematters.",
-      sloganDE: 'Denn anders als die Größe zählt hier der Preis.',
+      slogansEN: [
+        'Because unlike size, pricematters.',
+        "Don't look at the price tag – know the unit price.",
+        'Amazon makes it complicated. We make it simple.',
+      ],
+      slogansDE: [
+        'Denn anders als die Größe zählt hier der Preis.',
+        'Schau nicht auf den Preis – schau auf den Grundpreis.',
+        'Es kommt nicht auf die Größe an, sondern auf den Preis.',
+      ],
     },
     'dothemath.app': {
       name: 'DoTheMath',
-      sloganEN: 'With your hard-earned money you always gotta do the math.',
-      sloganDE: 'Bei deinem hart verdienten Geld musst du immer nachrechnen.',
+      slogansEN: [
+        'With your hard-earned money you always gotta do the math.',
+        'Marketing is a lie. Math is not.',
+      ],
+      slogansDE: [
+        'Bei deinem hart verdienten Geld musst du immer nachrechnen.',
+        'Marketing lügt. Mathe nicht.',
+      ],
     },
     'moneysworth.app': {
       name: 'MoneysWorth',
-      sloganEN: 'Because here you get your moneysworth.',
-      sloganDE: "Hier bekommst du was für dein Geld.",
+      slogansEN: [
+        'Because here you get your moneysworth.',
+        "Stop guessing what things really cost.",
+      ],
+      slogansDE: [
+        'Hier bekommst du was für dein Geld.',
+        'Schluss mit Raten, was Dinge wirklich kosten.',
+      ],
     },
     default: {
       name: 'PriceMatters',
-      sloganEN: "Don't look at the price tag – know the unit price.",
-      sloganDE: 'Schau nicht auf den Preis – schau auf den Grundpreis.',
+      slogansEN: [
+        "Don't look at the price tag – know the unit price.",
+        'Because unlike size, pricematters.',
+      ],
+      slogansDE: [
+        'Denn anders als die Größe zählt hier der Preis.',
+        'Schau nicht auf den Preis – schau auf den Grundpreis.',
+      ],
     },
   },
   // hostname -> brand key (prod subdomains + bare .app domains, one image)
