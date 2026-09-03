@@ -18,6 +18,7 @@
     "alsoSearched": "Auch gesucht:",
     "demo": "Demo-Daten – echte Live-Preise kommen, sobald ein Daten-Key hinterlegt ist.",
     "empty": "Nichts gefunden. Versuch es mit einem anderen Begriff – z. B. auf Englisch.",
+    "rateLimited": "Du suchst gerade etwas zu schnell – kurze Pause, dann geht's weiter. Versuch es in {s} Sekunden wieder.",
     "best": "Bester Deal",
     "per": "pro",
     "viewDeal": "Ansehen",
@@ -65,6 +66,10 @@
     "d2": "€/kg statt Mond­preisen.",
     "t3": "Kostenlos",
     "d3": "Für immer, ohne Konto."
+  },
+  "theme": {
+    "darkHint": "Die Seite sieht im Lightmode am besten aus – der Darkmode funktioniert, ist aber nicht 100% perfekt. Und keine Sorge: Amazon öffnet sich trotzdem normal im hellen Design, dich erwartet kein Blitz beim Klick. 😉",
+    "ok": "Alles klar"
   },
   "ads": {
     "label": "Anzeige",

@@ -16,6 +16,12 @@ export default defineNuxtConfig({
       redirectOn: 'root',
     },
   },
+  routeRules: {
+    '/logo.svg': { headers: { 'cache-control': 'public, max-age=604800, immutable' } },
+    '/logo-dark.svg': { headers: { 'cache-control': 'public, max-age=604800, immutable' } },
+    '/og.png': { headers: { 'cache-control': 'public, max-age=604800' } },
+    '/robots.txt': { headers: { 'cache-control': 'public, max-age=86400' } },
+  },
   app: {
     head: {
       htmlAttrs: { lang: 'de-AT' },

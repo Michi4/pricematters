@@ -18,6 +18,7 @@
     "alsoSearched": "Also searched:",
     "demo": "Demo data – live prices kick in once a data key is configured.",
     "empty": "Nothing found. Try another term – e.g. in German.",
+    "rateLimited": "You're searching a bit too fast – take a short break. Try again in {s} seconds.",
     "best": "Best deal",
     "per": "per",
     "viewDeal": "View",
@@ -65,6 +66,10 @@
     "d2": "True per-unit values, no inflated discounts.",
     "t3": "Free",
     "d3": "Forever, no account needed."
+  },
+  "theme": {
+    "darkHint": "The site looks best in light mode – dark mode works, but isn't 100% perfect. And don't worry: Amazon opens normally in its bright design, no flash when you click. 😉",
+    "ok": "Got it"
   },
   "ads": {
     "label": "Ad",

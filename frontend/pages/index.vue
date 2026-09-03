@@ -48,19 +48,27 @@
               <option v-for="m in MARKETS.filter((x) => x.group === 'world')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
             </optgroup>
           </select>
-          <button type="submit">{{ pending ? t('hero.searching') : t('hero.searchButton') }}</button>
+          <button type="submit" :disabled="pending" :aria-busy="pending">
+            <svg v-if="pending" class="spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.35)" stroke-width="3"/>
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <span class="btn-label">{{ pending ? t('hero.searching') : t('hero.searchButton') }}</span>
+          </button>
         </form>
         <p class="popular">{{ t('hero.popular') }}
-          <button v-for="p in popular" :key="p" @click="q = p; search()">{{ p }}</button>
+          <TransitionGroup name="fade">
+            <button v-for="p in popular" :key="p" @click="q = p; search()">{{ p }}</button>
+          </TransitionGroup>
         </p>
       </section>
 
       <section v-if="faves.length && !searched" class="faves">
         <h2>{{ t('faves.title') }}</h2>
         <p class="mut">{{ t('faves.sub') }}</p>
-        <article v-for="f in faves" :key="f.asin" class="card">
+        <article v-for="(f, fi) in faves" :key="f.asin" class="card">
           <div class="card-main">
-            <img v-if="f.image" :src="f.image" :alt="f.title" loading="lazy" class="thumb" />
+            <img v-if="f.image" :src="thumbUrl(f.image)" :alt="f.title" width="84" height="84" class="thumb" />
             <div v-else class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
             <div class="card-body">
               <h2>{{ f.title }}</h2>
@@ -71,12 +79,27 @@
               </div>
             </div>
           </div>
-          <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta">{{ t('results.atAmazon') }}</a>
+          <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`">{{ t('results.atAmazon') }}</a>
           <span class="paid">{{ t('results.paidLink') }}</span>
         </article>
       </section>
 
-      <section v-if="searched" class="results">
+      <!-- skeleton keeps layout stable while searching (no jumping) -->
+      <section v-if="pending && !searched" class="results" aria-hidden="true">
+        <div class="skel meta-row"><span class="skel-bar" style="width: 30%"></span></div>
+        <div v-for="n in 4" :key="n" class="card skel">
+          <div class="card-main">
+            <div class="thumb skel-thumb"></div>
+            <div class="card-body">
+              <div class="skel-bar" style="width: 85%; height: 1rem"></div>
+              <div class="skel-bar" style="width: 55%; height: 1rem; margin-top: 0.5rem"></div>
+              <div class="skel-bar" style="width: 40%; height: 1.6rem; margin-top: 0.8rem"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="searched" class="results" aria-live="polite">
         <div class="meta-row">
           <span>{{ t('results.count', { n: sorted.length }) }}</span>
           <span v-if="meta.demo" class="demo">{{ t('results.demo') }}</span>
@@ -136,6 +159,8 @@
           </div>
         </details>
 
+        <p v-if="searchError" class="error banner">{{ t('results.rateLimited', { s: searchRetry }) }}</p>
+
         <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
         <template v-for="(r, i) in paged" :key="r.asin">
@@ -145,7 +170,7 @@
             <span class="store">{{ r.store || 'Amazon' }}</span>
           </div>
           <div class="card-main">
-            <img v-if="r.image" :src="r.image" :alt="r.title" loading="lazy" class="thumb" />
+            <img v-if="r.image" :src="thumbUrl(r.image)" :alt="r.title" loading="lazy" width="84" height="84" class="thumb" />
             <div v-else class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
             <div class="card-body">
           <h2>{{ r.title }}</h2>
@@ -158,7 +183,7 @@
           </div>
             </div>
           </div>
-          <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta">
+          <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`">
             {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
           </a>
           <span class="paid">{{ t('results.paidLink') }}</span>
@@ -196,13 +221,20 @@
       </aside>
     </div>
 
+    <Transition name="fade">
+      <div v-if="showDarkHint" class="dark-hint" role="status">
+        <p>{{ t('theme.darkHint') }}</p>
+        <button class="linklike" @click="dismissDarkHint">{{ t('theme.ok') }}</button>
+      </div>
+    </Transition>
+
     <footer>
       <p class="disclosure">{{ t('footer.disclosure') }}</p>
       <p>{{ t('footer.by') }} <a href="https://websters.at" target="_blank" rel="noopener">websters.at</a> · <button class="linklike" @click="adOpen = true">{{ t('ads.title') }}</button></p>
     </footer>
 
     <div v-if="adOpen" class="modal-backdrop" @click.self="adOpen = false">
-      <div class="modal" role="dialog" aria-modal="true">
+      <div ref="modalEl" class="modal" role="dialog" aria-modal="true" :aria-label="t('ads.title')">
         <button class="modal-x" @click="adOpen = false" aria-label="Close">✕</button>
         <h2>{{ t('ads.title') }}</h2>
         <p class="mut">{{ t('ads.text') }}</p>
@@ -233,6 +265,7 @@ import { convertPer, DISPLAY_TARGETS, extractQuantity, unitPrice } from '../lib/
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
 const { t, tm, locale, locales } = useI18n();
+const { trackEvent, t0 } = useTracking();
 const localePath = useLocalePath();
 const switchLocalePath = useSwitchLocalePath();
 const route = useRoute();
@@ -250,6 +283,7 @@ const fmtSlogan = (s: string) => s.replace(/\*([^*]+)\*/g, '<u>$1</u>');
 const plainSlogan = (s: string) => s.replaceAll('*', '');
 const sloganIdx = ref(0);
 const theme = ref('light');
+const showDarkHint = ref(false);
 let timer: ReturnType<typeof setInterval> | null = null;
 function applyTheme(t: string) {
   theme.value = t;
@@ -257,7 +291,19 @@ function applyTheme(t: string) {
   try { localStorage.setItem('pm_theme', t); } catch { /* private mode */ }
 }
 function toggleTheme() {
-  applyTheme(theme.value === 'dark' ? 'light' : 'dark');
+  const next = theme.value === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  // honest one-time hint: light is the polished default, dark works but isn't perfect
+  if (next === 'dark') {
+    try { showDarkHint.value = !localStorage.getItem('pm_dark_hint'); } catch { showDarkHint.value = true; }
+  } else {
+    showDarkHint.value = false;
+  }
+  trackEvent('theme', { ref: next });
+}
+function dismissDarkHint() {
+  showDarkHint.value = false;
+  try { localStorage.setItem('pm_dark_hint', '1'); } catch { /* private mode */ }
 }
 const { data: favesData } = await useAsyncData('faves', () =>
   $fetch('/api/curated', { query: { marketplace: 'de' } }).catch(() => ({ items: [] })));
@@ -298,7 +344,8 @@ onMounted(() => {
   timer = setInterval(() => { sloganIdx.value = (sloganIdx.value + 1) % Math.max(slogans.value.length, 1); }, 5000);
   try {
     const saved = localStorage.getItem('pm_theme');
-    applyTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    // light is the default; respect an explicit user choice only
+    applyTheme(saved === 'dark' ? 'dark' : 'light');
   } catch { applyTheme('light'); }
   loadPopular();
   marketplace.value = guessMarketplace();
@@ -369,6 +416,21 @@ const adSending = ref(false);
 const adSent = ref(false);
 const adError = ref(false);
 const adOpen = ref(false);
+const searchError = ref(false);
+const searchRetry = ref(0);
+const modalEl = ref<HTMLElement | null>(null);
+
+// refresh faves + popular when marketplace changes (registered once, not per search)
+watch(marketplace, () => { loadFaves(); loadPopular(); });
+
+function onModalKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && adOpen.value) adOpen.value = false;
+}
+onMounted(() => window.addEventListener('keydown', onModalKey));
+onUnmounted(() => window.removeEventListener('keydown', onModalKey));
+watch(adOpen, (open) => {
+  if (open) nextTick(() => (modalEl.value?.querySelector('button, input, select, textarea') as HTMLElement | null)?.focus());
+});
 
 async function submitContact() {
   adSending.value = true;
@@ -431,6 +493,8 @@ const zoneLabel = computed(() => {
   const m = MARKETS.find((x) => x.code === marketplace.value);
   return m ? `${countryName(m.cc)} · ${m.domain}` : marketplace.value;
 });
+const thumbUrl = (src: string | undefined) =>
+  src ? src.replace(/\._[^.]+_\./, '._AC_SY160_.') : src;
 const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
 const moneyBare = (cents: number) => (cents / 100).toFixed(2);
 // quantities: max 2 decimals, no float artifacts (2721.551999999997 -> 2721.55)
@@ -446,8 +510,10 @@ function goHome() {
 }
 
 async function search() {
-  if (!q.value.trim()) return;
+  if (!q.value.trim() || pending.value) return;
   pending.value = true;
+  searchError.value = false;
+  const started = Date.now();
   try {
     await navigateTo({ query: { q: q.value, marketplace: marketplace.value } }, { replace: true });
     const data = await $fetch('/api/search', { query: { q: q.value, marketplace: marketplace.value } });
@@ -456,12 +522,24 @@ async function search() {
     searched.value = true;
     storeFilter.value = 'all';
     page.value = 1;
-  loadPopular();
-  loadFaves();
-  watch(marketplace, () => { loadFaves(); loadPopular(); });
+    trackEvent('search', {
+      query: q.value, marketplace: marketplace.value,
+      result_count: results.value.length, ms: Date.now() - started,
+    });
     // sensible default display unit from result kinds
     const bases = new Set(results.value.map((r: any) => r.unitPrice?.base));
     displayUnit.value = bases.has('kg') ? 'kg' : bases.has('l') ? 'l' : bases.has('pcs') ? 'pcs' : 'kg';
+  } catch (e: any) {
+    const status = e?.status || e?.response?.status;
+    if (status === 429) {
+      searchRetry.value = e?.data?.retry_after || 60;
+      trackEvent('search', { query: q.value, marketplace: marketplace.value, result_count: -429, ms: Date.now() - started });
+    } else {
+      searchRetry.value = 0;
+      trackEvent('search', { query: q.value, marketplace: marketplace.value, result_count: -1, ms: Date.now() - started });
+    }
+    searchError.value = true;
+    searched.value = true;
   } finally {
     pending.value = false;
   }
@@ -541,13 +619,18 @@ useHead({
 </script>
 
 <style>
-:root { --green: #16a34a; --green-d: #15803d; --ink: #1a2e1f; --mut: #5b6b5e; --bg: #f6faf7; --card: #fff; --line: #e3ece4; --input-line: #d5e2d7; color-scheme: light; }
-[data-theme="dark"] { --ink: #e9f1ea; --mut: #9db0a1; --bg: #0d140f; --card: #141d17; --line: #26332b; --input-line: #31402f; color-scheme: dark; }
+:root { --green: #12813c; --green-d: #0d6a30; --ink: #1a2e1f; --mut: #55655a; --bg: #f6faf7; --card: #fff; --line: #e3ece4; --input-line: #d5e2d7; color-scheme: light; }
+[data-theme="dark"] { --ink: #e9f1ea; --mut: #a9bbad; --bg: #0d140f; --card: #141d17; --line: #26332b; --input-line: #31402f; color-scheme: dark; }
 [data-theme="dark"] .unitprice, [data-theme="dark"] .popular button { color: #4ade80; }
 [data-theme="dark"] .demo { background: #453304; color: #fcd34d; }
 [data-theme="dark"] .store { background: #223028; }
 * { box-sizing: border-box; }
 body { margin: 0; }
+html { scrollbar-gutter: stable; }
+:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
 .page { font-family: system-ui, -apple-system, sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
 .top { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.4rem; background: var(--card); border-bottom: 1px solid var(--line); }
 .logo { display: flex; gap: 0.5rem; align-items: center; font-weight: 800; font-size: 1.15rem; color: var(--ink); text-decoration: none; }
@@ -555,7 +638,7 @@ body { margin: 0; }
 .theme-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; cursor: pointer; }
 .theme-btn svg { width: 1.1rem; height: 1.1rem; }
 .theme-btn:hover { border-color: var(--green); color: var(--green-d); }
-.lang a { text-decoration: none; color: var(--mut); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
+.lang a { text-decoration: none; color: var(--ink); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
 .logo-light { display: block; }
 .logo-dark { display: none; }
@@ -566,7 +649,7 @@ body { margin: 0; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 50vh; transform: translateY(-50%); align-self: flex-start; display: flex; }
 .rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
-.ad { border: none; border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; opacity: 0.55; transition: opacity 0.2s; }
+.ad { border: none; border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; opacity: 0.85; transition: opacity 0.2s; }
 .ad:hover { opacity: 1; }
 .ad-label { display: inline-block; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; }
 .ad a { color: var(--green-d); font-weight: 700; }
@@ -596,10 +679,21 @@ body { margin: 0; }
 .search input { flex: 1; padding: 0.85rem 1rem; font-size: 1.05rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
 .search input:focus { outline: none; border-color: var(--green); }
 .search select, .controls select { padding: 0.85rem 0.6rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
-.search button { padding: 0.85rem 1.6rem; font-size: 1.05rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 12px; cursor: pointer; }
-.search button:hover { background: var(--green-d); }
-.popular { color: var(--mut); font-size: 0.9rem; }
+.search button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem 1.6rem; min-width: 9.5rem; font-size: 1.05rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 12px; cursor: pointer; transition: background 0.15s; }
+.search button:hover:not(:disabled) { background: var(--green-d); }
+.search button:disabled { opacity: 0.75; cursor: wait; }
+.spin { width: 1.1rem; height: 1.1rem; animation: rot 0.7s linear infinite; }
+@keyframes rot { to { transform: rotate(1turn); } }
+.skel { pointer-events: none; }
+.skel-thumb { background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%); background-size: 200% 100%; animation: shine 1.2s infinite; }
+.skel-bar { border-radius: 6px; background: linear-gradient(90deg, var(--line) 25%, var(--bg) 50%, var(--line) 75%); background-size: 200% 100%; animation: shine 1.2s infinite; }
+.skel .skel-bar { height: 0.9rem; }
+@keyframes shine { to { background-position: -200% 0; } }
+.error.banner { background: #fef3c7; color: #92400e; font-weight: 600; padding: 0.7rem 1rem; border-radius: 12px; text-align: center; }
+[data-theme="dark"] .error.banner { background: #453304; color: #fcd34d; }
+.popular { color: var(--mut); font-size: 0.9rem; min-height: 1.6em; }
 .popular button { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
+.popular button:hover { border-color: var(--green); }
 .meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; }
 .demo { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; }
 .controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 1rem; font-size: 0.92rem; }
@@ -612,6 +706,7 @@ body { margin: 0; }
 .filters-wrap .controls { border: none; margin-bottom: 0; }
 .card-main { display: flex; gap: 1rem; align-items: flex-start; }
 .thumb { width: 84px; height: 84px; min-width: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+.card:not(.skel) .thumb { content-visibility: auto; }
 .thumb.placeholder { display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .card-body { flex: 1; min-width: 0; }
 .stores button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
@@ -641,6 +736,7 @@ body { margin: 0; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
+.card-body > .numbers { contain: inline-size; }
 .paid { color: var(--mut); font-size: 0.75rem; margin-left: 0.6rem; }
 .marketing { text-align: center; padding: 1rem 0; }
 .mut { color: var(--mut); }
@@ -648,6 +744,9 @@ body { margin: 0; }
 .steps div, .trust div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
 .steps p, .trust p { color: var(--mut); font-size: 0.92rem; }
 footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid var(--line); background: var(--card); }
+.dark-hint { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--ink); color: var(--bg); border-radius: 12px; padding: 0.8rem 1.1rem; max-width: 430px; width: calc(100% - 2rem); font-size: 0.88rem; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+.dark-hint p { margin: 0 0 0.4rem; }
+.dark-hint .linklike { color: inherit; }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
 @media (max-width: 600px) { .hero h1 { font-size: 2rem; } .search { flex-direction: column; } }
 </style>

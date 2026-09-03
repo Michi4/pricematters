@@ -7,7 +7,9 @@ Feed shops:  Awin & co via nightly CSV import (feeds.py) into Postgres,
 Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
 import os
-from fastapi import FastAPI, Query
+import time
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from affiliate import monetize, affiliate_url
 from extractor import extract_quantity, unit_price
@@ -18,6 +20,40 @@ app = FastAPI(title="PriceMatters API")
 DEFAULT_TAG = "websters02-21"
 # bump to invalidate all cached rows (e.g. after provider param changes like delivery zones)
 CACHE_VERSION = "v2"
+
+# per-IP rate limits for /search: what a normal user never hits, bots do
+RATE_MIN = int(os.getenv("RATE_SEARCH_PER_MIN", "20"))
+RATE_HOUR = int(os.getenv("RATE_SEARCH_PER_HOUR", "100"))
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "anon")
+
+
+def _rate_retry_after(request: Request) -> int:
+    """Fixed-window counters in Redis. Returns seconds to wait, 0 = allowed."""
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is None:
+            return 0
+        ip = _client_ip(request)
+        now = int(time.time())
+        mk = f"{CACHE_VERSION}:rlm:{ip}:{now // 60}"
+        hk = f"{CACHE_VERSION}:rlh:{ip}:{now // 3600}"
+        p = r.pipeline()
+        p.incr(mk); p.expire(mk, 90)
+        p.incr(hk); p.expire(hk, 3700)
+        out = p.execute()
+        per_min, per_hour = out[0], out[2]
+        if per_min > RATE_MIN:
+            return max(61 - now % 60, 1)
+        if per_hour > RATE_HOUR:
+            return max(3601 - now % 3600, 1)
+        return 0
+    except Exception:
+        return 0  # never block search because the limiter broke
 
 
 def log_search(query: str, marketplace: str, count: int):
@@ -63,8 +99,22 @@ def extract(title: str = Query(...), description: str = ""):
 
 
 @app.get("/search")
-def search(q: str = Query(...), marketplace: str = Query("de"),
-           provider: str | None = Query(None), stores: str = Query("all")):
+def search(request: Request, q: str = Query(...), marketplace: str = Query("de"),
+           provider: str | None = Query(None), stores: str = Query("all"),
+           lang: str = Query(""), tz: str = Query(""), w: int = Query(0)):
+    wait = _rate_retry_after(request)
+    if wait:
+        try:
+            from track import ip_hash, track
+            track({"kind": "rate_limited", "query": q, "marketplace": marketplace,
+                   "ipd": ip_hash(_client_ip(request)), "w": w})
+        except Exception:
+            pass
+        return JSONResponse(
+            status_code=429,
+            content={"items": [], "meta": {}, "error": "rate_limited", "retry_after": wait},
+            headers={"Retry-After": str(wait)},
+        )
     single = provider or None
     if single:
         chain = [single]
@@ -252,3 +302,102 @@ def popular(marketplace: str = Query("de"), limit: int = Query(4)):
             return {"items": [r[0] for r in cur.fetchall()]}
     except Exception:
         return {"items": []}
+
+
+# ---------- anonymous first-party analytics (DSGVO-safe) ----------
+
+class Track(BaseModel):
+    kind: str = ""
+    query: str = ""
+    marketplace: str = ""
+    result_count: int = 0
+    country: str = ""
+    lang: str = ""
+    tz: str = ""
+    device: str = ""
+    w: int = 0
+    asin: str = ""
+    store: str = ""
+    pos: int = 0
+    title: str = ""
+    price_cents: int = 0
+    ms: int = 0
+    ref: str = ""
+
+
+@app.post("/track")
+def track_event(t: Track, request: Request):
+    """Fire-and-forget collector. No cookies, no raw IPs (daily-salted hash only)."""
+    from track import ip_hash, track
+    ok = track({"kind": t.kind[:40], "query": t.query, "marketplace": t.marketplace,
+                "result_count": t.result_count, "ipd": ip_hash(_client_ip(request)),
+                "country": t.country, "lang": t.lang, "tz": t.tz, "device": t.device,
+                "w": t.w, "asin": t.asin, "store": t.store, "pos": t.pos,
+                "title": t.title, "price_cents": t.price_cents, "ms": t.ms, "ref": t.ref})
+    return {"ok": ok}
+
+
+def _admin_ok(request: Request) -> bool:
+    import hmac
+    key = os.getenv("ADMIN_KEY", "")
+    supplied = request.query_params.get("key", "") or request.headers.get("x-admin-key", "")
+    return bool(key) and hmac.compare_digest(supplied, key)
+
+
+@app.get("/stats")
+def stats(request: Request, days: int = Query(30)):
+    """Admin-only aggregates for the /admin page."""
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    days = max(1, min(days, 365))
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return {"error": "no database configured"}
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            def rows(sql, args=()):
+                cur.execute(sql, args)
+                return cur.fetchall()
+            out: dict = {"days": days}
+            out["totals"] = rows("""SELECT kind, COUNT(*) FROM events
+                WHERE ts > now() - make_interval(days => %s) GROUP BY kind ORDER BY 2 DESC""", (days,))
+            out["daily"] = rows("""SELECT date_trunc('day', ts)::date::text,
+                COUNT(*) FILTER (WHERE kind='search'), COUNT(*) FILTER (WHERE kind='click'),
+                COUNT(DISTINCT ipd) FROM events
+                WHERE ts > now() - make_interval(days => %s)
+                GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
+            out["topQueries"] = rows("""SELECT query, COUNT(*) FROM events
+                WHERE kind='search' AND ts > now() - make_interval(days => %s) AND query <> ''
+                GROUP BY query ORDER BY 2 DESC LIMIT 30""", (days,))
+            out["zeroResults"] = rows("""SELECT query, COUNT(*) FROM events
+                WHERE kind='search' AND ts > now() - make_interval(days => %s)
+                  AND COALESCE(result_count, 0) = 0 AND query <> ''
+                GROUP BY query ORDER BY 2 DESC LIMIT 20""", (days,))
+            out["topClicks"] = rows("""SELECT COALESCE(NULLIF(title, ''), asin), asin, store,
+                COUNT(*) FROM events WHERE kind='click'
+                AND ts > now() - make_interval(days => %s)
+                GROUP BY 1, 2, 3 ORDER BY 4 DESC LIMIT 30""", (days,))
+            out["ctrByQuery"] = rows("""SELECT query,
+                COUNT(*) FILTER (WHERE kind='search') AS searches,
+                COUNT(*) FILTER (WHERE kind='click') AS clicks
+                FROM events WHERE kind IN ('search','click')
+                AND ts > now() - make_interval(days => %s) AND query <> ''
+                GROUP BY query HAVING COUNT(*) FILTER (WHERE kind='search') > 0
+                ORDER BY 2 DESC LIMIT 25""", (days,))
+            out["visitors"] = rows("""SELECT date_trunc('day', ts)::date::text,
+                COUNT(DISTINCT ipd) FROM events
+                WHERE ts > now() - make_interval(days => %s) GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
+            for name, col in [("markets", "marketplace"), ("langs", "lang"), ("tzs", "tz"),
+                              ("devices", "device"), ("widths", "w"), ("refs", "ref")]:
+                out[name] = rows(f"""SELECT COALESCE(NULLIF({col}::text, ''), '?'), COUNT(*),
+                    COUNT(DISTINCT ipd) FROM events
+                    WHERE ts > now() - make_interval(days => %s)
+                    GROUP BY 1 ORDER BY 2 DESC LIMIT 20""", (days,))
+            out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)) FROM events
+                WHERE ms > 0 AND ts > now() - make_interval(days => %s) GROUP BY kind""", (days,))
+            out["adInquiries"] = rows("""SELECT name, email, slot, created_at::date::text
+                FROM ad_inquiries ORDER BY created_at DESC LIMIT 25""")
+            return out
+    except Exception as e:
+        return {"error": str(e)}
