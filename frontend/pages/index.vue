@@ -413,7 +413,8 @@ body { margin: 0; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: stretch; display: flex; }
 .rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
-.ad { border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; }
+.ad { border: none; border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; opacity: 0.55; transition: opacity 0.2s; }
+.ad:hover { opacity: 1; }
 .ad-label { display: inline-block; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; }
 .ad a { color: var(--green-d); font-weight: 700; }
 .ad.infeed { margin-bottom: 0.8rem; }

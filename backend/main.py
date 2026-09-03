@@ -96,7 +96,21 @@ def search(q: str = Query(...), marketplace: str = Query("de"),
             meta["cache"] = f"fresh (ttl {info['ttl'] // 3600}h)"
             items = [enrich(*row, marketplace) for row in rows]
         except RuntimeError as e:
-            return {"items": [], "meta": meta, "error": str(e)}
+            if name == "mock":
+                return {"items": [], "meta": meta, "error": str(e)}
+            # real provider failed -> honest demo fallback, never a dead page
+            meta["error"] = str(e)
+            meta["fallback"] = True
+            meta["demo"] = True
+            rows = PROVIDERS["mock"](q, marketplace)
+            fp = "|".join(f"{r[0]}:{r[2]}" for r in rows)
+            try:
+                cache_store(ckey, rows, fp)
+            except Exception:
+                pass
+            items = [enrich(*row, marketplace) for row in rows]
+            for row in rows:
+                seen.add(row[0])
 
     if stores == "all":
         try:
