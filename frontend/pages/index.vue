@@ -27,7 +27,6 @@
         <div class="ad">
           <span class="ad-label">{{ t('ads.label') }}</span>
           <p><strong>{{ t('ads.sidebar') }}</strong></p>
-          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
           <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a>
         </div>
       </aside>
@@ -219,7 +218,6 @@
         <div class="ad">
           <span class="ad-label">{{ t('ads.label') }}</span>
           <p><strong>{{ t('ads.sidebar') }}</strong></p>
-          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
           <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a>
         </div>
       </aside>
@@ -676,7 +674,7 @@ html { scrollbar-gutter: stable; }
 @media (max-width: 1250px) { .rail { display: none; } }
 .hero { text-align: center; padding: 3rem 0 1.5rem; }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; font-weight: 800; color: var(--green-d); margin: 0 0 0.6rem; }
-.hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
+.hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; height: 2.5em; display: flex; align-items: center; justify-content: center; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 .search { display: flex; gap: 0.5rem; max-width: 640px; margin: 0 auto; }
@@ -698,7 +696,7 @@ html { scrollbar-gutter: stable; }
 .popular { color: var(--mut); font-size: 0.9rem; min-height: 1.6em; }
 .popular button { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
 .popular button:hover { border-color: var(--green); }
-.meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; }
+.meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; min-height: 1.8em; }
 .demo { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; }
 .controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 1rem; font-size: 0.92rem; }
 .controls label { display: flex; gap: 0.4rem; align-items: center; }
@@ -749,9 +747,9 @@ html { scrollbar-gutter: stable; }
 .steps div, .trust div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
 .steps p, .trust p { color: var(--mut); font-size: 0.92rem; }
 footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid var(--line); background: var(--card); }
-.dark-hint { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--ink); color: var(--bg); border-radius: 12px; padding: 0.8rem 1.1rem; max-width: 430px; width: calc(100% - 2rem); font-size: 0.88rem; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+.dark-hint { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 40; background: #0d140f; color: #e9f1ea; border-radius: 12px; padding: 0.8rem 1.1rem; max-width: 430px; width: calc(100% - 2rem); font-size: 0.88rem; box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
 .dark-hint p { margin: 0 0 0.4rem; }
 .dark-hint .linklike { color: inherit; }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
-@media (max-width: 600px) { .hero h1 { font-size: 2rem; } .search { flex-direction: column; } }
+@media (max-width: 600px) { .hero h1 { font-size: 1.9rem; height: 3.6em; } .search { flex-direction: column; } }
 </style>
