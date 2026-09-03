@@ -68,7 +68,7 @@
     "d3": "Für immer, ohne Konto."
   },
   "theme": {
-    "darkHint": "Die Seite sieht im Lightmode am besten aus – der Darkmode funktioniert, ist aber nicht 100% perfekt. Und keine Sorge: Amazon öffnet sich trotzdem normal im hellen Design, dich erwartet kein Blitz beim Klick. 😉",
+    "darkHint": "Die Seite sieht im Lightmode am besten aus – der Darkmode funktioniert, ist aber nicht 100% perfekt. Achtung: Amazon & externe Seiten sind grellhell – ohne Dark Reader wirst du bei jedem Klick flash-gedbanged. 😉",
     "ok": "Alles klar"
   },
   "ads": {
