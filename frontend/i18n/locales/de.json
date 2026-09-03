@@ -25,6 +25,13 @@
       "name": "Name A–Z"
     },
     "unit": { "label": "Anzeigen als" },
+    "filter": {
+      "min": "Min-Preis",
+      "max": "Max-Preis",
+      "kind": "Art",
+      "onlyUnit": "Nur mit Grundpreis",
+      "kinds": { "all": "Alles", "mass": "Gewicht", "volume": "Volumen", "count": "Stück", "storage": "Speicher" }
+    },
     "store": { "all": "Alle", "label": "Shops" }
   },
   "cats": {

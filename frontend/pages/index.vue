@@ -70,6 +70,28 @@
           </div>
         </div>
 
+        <div v-if="sorted.length" class="controls filters">
+          <label>{{ t('results.filter.min') }}
+            <input v-model="minPrice" type="number" min="0" step="0.01" placeholder="0.00" />
+          </label>
+          <label>{{ t('results.filter.max') }}
+            <input v-model="maxPrice" type="number" min="0" step="0.01" placeholder="∞" />
+          </label>
+          <label>{{ t('results.filter.kind') }}
+            <select v-model="kindFilter">
+              <option value="all">{{ t('results.filter.kinds.all') }}</option>
+              <option value="mass">{{ t('results.filter.kinds.mass') }}</option>
+              <option value="volume">{{ t('results.filter.kinds.volume') }}</option>
+              <option value="count">{{ t('results.filter.kinds.count') }}</option>
+              <option value="storage">{{ t('results.filter.kinds.storage') }}</option>
+            </select>
+          </label>
+          <label class="check">
+            <input v-model="onlyUnit" type="checkbox" />
+            {{ t('results.filter.onlyUnit') }}
+          </label>
+        </div>
+
         <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
         <article v-for="(r, i) in sorted" :key="r.asin" class="card" :class="{ best: i === 0 && sortKey === 'unit' && shownUnit(r) }">
@@ -166,6 +188,10 @@ const searched = ref(false);
 const sortKey = ref('unit');
 const displayUnit = ref('kg');
 const storeFilter = ref('all');
+const minPrice = ref('');
+const maxPrice = ref('');
+const kindFilter = ref('all');
+const onlyUnit = ref(true);
 
 const popular = computed(() => locale.value === 'de'
   ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
@@ -213,7 +239,16 @@ const unitOptions = computed(() => {
 });
 
 const sorted = computed(() => {
-  const arr = results.value.filter((r: any) => storeFilter.value === 'all' || (r.store || 'Amazon') === storeFilter.value);
+  const min = parseFloat(minPrice.value) * 100;
+  const max = parseFloat(maxPrice.value) * 100;
+  const arr = results.value.filter((r: any) => {
+    if (storeFilter.value !== 'all' && (r.store || 'Amazon') !== storeFilter.value) return false;
+    if (onlyUnit.value && !r.unitPrice) return false;
+    if (kindFilter.value !== 'all' && r.qty?.kind !== kindFilter.value) return false;
+    if (!isNaN(min) && minPrice.value !== '' && r.priceCents < min) return false;
+    if (!isNaN(max) && maxPrice.value !== '' && r.priceCents > max) return false;
+    return true;
+  });
   const by = {
     unit: (a: any, b: any) => (shownUnit(a) ?? Infinity) - (shownUnit(b) ?? Infinity),
     priceAsc: (a: any, b: any) => a.priceCents - b.priceCents,
@@ -288,6 +323,9 @@ main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3
 .controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid #e3ece4; margin-bottom: 1rem; font-size: 0.92rem; }
 .controls label { display: flex; gap: 0.4rem; align-items: center; }
 .controls select { padding: 0.4rem 0.5rem; border-radius: 8px; }
+.controls input[type="number"] { width: 6rem; padding: 0.4rem 0.5rem; border: 2px solid #d5e2d7; border-radius: 8px; }
+.controls .check { display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
+.filters { background: #f0f6f1; }
 .stores button { border: 1px solid #cfdccf; background: #fff; border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
 .stores button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 .empty { text-align: center; color: var(--mut); padding: 2rem; }

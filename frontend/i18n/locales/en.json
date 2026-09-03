@@ -25,6 +25,13 @@
       "name": "Name A–Z"
     },
     "unit": { "label": "Show as" },
+    "filter": {
+      "min": "Min price",
+      "max": "Max price",
+      "kind": "Type",
+      "onlyUnit": "Only with unit price",
+      "kinds": { "all": "All", "mass": "Weight", "volume": "Volume", "count": "Pieces", "storage": "Storage" }
+    },
     "store": { "all": "All", "label": "Shops" }
   },
   "cats": {
