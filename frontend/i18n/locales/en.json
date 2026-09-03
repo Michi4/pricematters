@@ -38,7 +38,7 @@
       "max": "Max price",
       "kind": "Type",
       "onlyUnit": "Only with unit price",
-      "kinds": { "all": "All", "mass": "Weight", "volume": "Volume", "count": "Pieces", "storage": "Storage" }
+      "kinds": { "all": "All", "mass": "Weight (kg, g)", "volume": "Volume (L, mL)", "count": "Count", "storage": "Storage (GB, TB)" }
     },
     "store": { "all": "All", "label": "Shops" }
   },
@@ -67,6 +67,24 @@
     "d2": "True per-unit values, no inflated discounts.",
     "t3": "Free",
     "d3": "Forever, no account needed."
+  },
+  "ads": {
+    "label": "Ad",
+    "sidebar": "Your banner here",
+    "sidebarSub": "Your audience, zero waste.",
+    "cta": "Request this spot",
+    "infeed": "Your product could be right here.",
+    "title": "Advertise on PriceMatters",
+    "text": "Sponsored slots — always clearly labeled as ads, never disguised as results. Everything is available right now.",
+    "name": "Name",
+    "email": "Email",
+    "message": "Message",
+    "slot": "Placement",
+    "slots": { "rail": "Sidebar banner", "infeed": "In-feed" },
+    "send": "Send request",
+    "sending": "Sending …",
+    "error": "Could not send – just email us at werbung@websters.at.",
+    "done": "Thanks! We'll get back to you shortly."
   },
   "footer": {
     "disclosure": "As an Amazon Associate we earn from qualifying purchases – at no extra cost to you.",

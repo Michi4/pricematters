@@ -2,7 +2,8 @@
   <div class="page">
     <header class="top">
       <NuxtLink :to="localePath('/')" class="logo">
-        <img src="/logo.svg" alt="logo" width="28" height="28" />
+        <img src="/logo.svg" alt="logo" width="28" height="28" class="logo-light" />
+        <img src="/logo-dark.svg" alt="logo" width="28" height="28" class="logo-dark" />
         <span>{{ brand.name }}</span>
       </NuxtLink>
       <div class="top-right">
@@ -21,11 +22,21 @@
       </div>
     </header>
 
+    <div class="layout">
+      <aside class="rail" aria-hidden="false">
+        <div class="ad">
+          <span class="ad-label">{{ t('ads.label') }}</span>
+          <p><strong>{{ t('ads.sidebar') }}</strong></p>
+          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
+          <a href="#werben">{{ t('ads.cta') }}</a>
+        </div>
+      </aside>
+
     <main>
       <section class="hero">
         <p class="eyebrow">{{ brand.name }}</p>
         <Transition name="fade" mode="out-in">
-          <h1 :key="sloganIdx">{{ slogans[sloganIdx] }}</h1>
+          <h1 :key="sloganIdx" v-html="fmtSlogan(slogans[sloganIdx] || '')"></h1>
         </Transition>
         <form class="search" @submit.prevent="search">
           <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus />
@@ -52,23 +63,25 @@
           </span>
         </div>
 
-        <details v-if="sorted.length" class="filters-wrap">
-          <summary>{{ t('results.filterTitle') }}</summary>
-          <div class="controls">
+        <div v-if="sorted.length" class="controls">
           <label>{{ t('results.sort.label') }}
             <select v-model="sortKey">
               <option value="unit">{{ t('results.sort.unit') }}</option>
               <option value="priceAsc">{{ t('results.sort.priceAsc') }}</option>
               <option value="priceDesc">{{ t('results.sort.priceDesc') }}</option>
-              <option value="name">{{ t('results.sort.name') }}</option>
             </select>
           </label>
+        </div>
+
+        <details v-if="sorted.length" class="filters-wrap">
+          <summary>{{ t('results.filterTitle') }}</summary>
+          <div class="controls">
           <label>{{ t('results.unit.label') }}
             <select v-model="displayUnit">
-              <option v-for="u in unitOptions" :key="u" :value="u">€ / {{ u }}</option>
+              <option v-for="u in unitOptions" :key="u" :value="u">{{ sym }} / {{ u }}</option>
             </select>
           </label>
-          <div class="stores">
+          <div v-if="stores.length > 1" class="stores">
             <span>{{ t('results.store.label') }}:</span>
             <button :class="{ active: storeFilter === 'all' }" @click="storeFilter = 'all'">{{ t('results.store.all') }}</button>
             <button
@@ -100,7 +113,8 @@
 
         <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
-        <article v-for="(r, i) in sorted" :key="r.asin" class="card" :class="{ best: i === 0 && sortKey === 'unit' && shownUnit(r) }">
+        <template v-for="(r, i) in sorted" :key="r.asin">
+        <article class="card" :class="{ best: i === 0 && sortKey === 'unit' && shownUnit(r) }">
           <div class="card-top">
             <span v-if="i === 0 && sortKey === 'unit' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
             <span class="store">{{ r.store || 'Amazon' }}</span>
@@ -123,6 +137,11 @@
             {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
           </a>
         </article>
+        <div v-if="i === 1 && sorted.length > 3" class="ad infeed">
+          <span class="ad-label">{{ t('ads.label') }}</span>
+          <p>{{ t('ads.infeed') }} <a href="#werben">{{ t('ads.cta') }}</a></p>
+        </div>
+        </template>
       </section>
 
       <section v-if="!searched" class="marketing">
@@ -157,7 +176,38 @@
           <div><strong>{{ t('trust.t3') }}</strong><p>{{ t('trust.d3') }}</p></div>
         </div>
       </section>
+
+      <section id="werben" class="werben">
+        <h2>{{ t('ads.title') }}</h2>
+        <p class="mut">{{ t('ads.text') }}</p>
+        <form v-if="!adSent" class="ad-form" @submit.prevent="submitContact">
+          <div class="row">
+            <label>{{ t('ads.name') }}<input v-model="adName" required maxlength="120" /></label>
+            <label>{{ t('ads.email') }}<input v-model="adEmail" type="email" required maxlength="160" /></label>
+          </div>
+          <label>{{ t('ads.slot') }}
+            <select v-model="adSlot">
+              <option value="rail">{{ t('ads.slots.rail') }}</option>
+              <option value="infeed">{{ t('ads.slots.infeed') }}</option>
+            </select>
+          </label>
+          <label>{{ t('ads.message') }}<textarea v-model="adMsg" rows="3" required maxlength="2000"></textarea></label>
+          <button type="submit" :disabled="adSending">{{ adSending ? t('ads.sending') : t('ads.send') }}</button>
+          <p v-if="adError" class="error">{{ t('ads.error') }}</p>
+        </form>
+        <p v-else class="done">{{ t('ads.done') }}</p>
+      </section>
     </main>
+
+      <aside class="rail" aria-hidden="false">
+        <div class="ad">
+          <span class="ad-label">{{ t('ads.label') }}</span>
+          <p><strong>{{ t('ads.sidebar') }}</strong></p>
+          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
+          <a href="#werben">{{ t('ads.cta') }}</a>
+        </div>
+      </aside>
+    </div>
 
     <footer>
       <p class="disclosure">{{ t('footer.disclosure') }}</p>
@@ -184,6 +234,9 @@ const brand = computed(() => {
 });
 const slogans = computed<string[]>(() =>
   brand.value[locale.value === 'de' ? 'slogansDE' : 'slogansEN'] || brand.value.slogansEN || []);
+// *word* markers in slogans become underlined emphasis in HTML, plain text in meta tags
+const fmtSlogan = (s: string) => s.replace(/\*([^*]+)\*/g, '<u>$1</u>');
+const plainSlogan = (s: string) => s.replaceAll('*', '');
 const sloganIdx = ref(0);
 const theme = ref('light');
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -208,12 +261,27 @@ onMounted(() => {
     applyTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   } catch { applyTheme('light'); }
   loadPopular();
+  marketplace.value = guessMarketplace();
   if (route.query.q) { q.value = String(route.query.q); search(); }
 });
 onUnmounted(() => { if (timer) clearInterval(timer); });
 
 const q = ref('');
 const marketplace = ref('de');
+// Auto: amazon address by user locale (de-AT -> at, en-GB -> co.uk, fr -> fr, en -> com)
+function guessMarketplace(): string {
+  try {
+    const forced = String(route.query.marketplace || '');
+    if (['de', 'at', 'com', 'co.uk', 'fr'].includes(forced)) return forced;
+    const l = navigator.language || '';
+    if (/^de-AT/i.test(l)) return 'at';
+    if (/^de/i.test(l)) return 'de';
+    if (/^en-GB/i.test(l)) return 'co.uk';
+    if (/^fr/i.test(l)) return 'fr';
+    if (/^en/i.test(l)) return 'com';
+  } catch { /* SSR: default */ }
+  return 'de';
+}
 const results = ref<any[]>([]);
 const meta = ref<any>({});
 const pending = ref(false);
@@ -225,6 +293,30 @@ const minPrice = ref('');
 const maxPrice = ref('');
 const kindFilter = ref('all');
 const onlyUnit = ref(true);
+const adName = ref('');
+const adEmail = ref('');
+const adMsg = ref('');
+const adSlot = ref('rail');
+const adSending = ref(false);
+const adSent = ref(false);
+const adError = ref(false);
+
+async function submitContact() {
+  adSending.value = true;
+  adError.value = false;
+  try {
+    const res = await $fetch('/api/contact', {
+      method: 'POST',
+      body: { name: adName.value, email: adEmail.value, message: adMsg.value, slot: adSlot.value },
+    }) as any;
+    if (res?.ok) adSent.value = true;
+    else adError.value = true;
+  } catch {
+    adError.value = true;
+  } finally {
+    adSending.value = false;
+  }
+}
 
 const popularApi = ref<string[]>([]);
 const popular = computed(() => popularApi.value.length ? popularApi.value : (locale.value === 'de'
@@ -284,7 +376,6 @@ const sorted = computed(() => {
     unit: (a: any, b: any) => (shownUnit(a) ?? Infinity) - (shownUnit(b) ?? Infinity),
     priceAsc: (a: any, b: any) => a.priceCents - b.priceCents,
     priceDesc: (a: any, b: any) => b.priceCents - a.priceCents,
-    name: (a: any, b: any) => String(a.title).localeCompare(String(b.title)),
   }[sortKey.value] as (a: any, b: any) => number;
   return [...arr].sort(by);
 });
@@ -295,7 +386,7 @@ const canonical = computed(() => `https://${config.public.canonicalHost}${url.pa
 const pageTitle = computed(() => locale.value === 'de'
   ? `${brand.value?.name} – Grundpreise vergleichen (€/kg, €/l, €/Stück)`
   : `${brand.value?.name} – Compare unit prices (€/kg, €/L, €/pc)`);
-const pageDesc = computed(() => slogans.value[0] || '');
+const pageDesc = computed(() => plainSlogan(slogans.value[0] || ''));
 useSeoMeta({
   title: () => pageTitle.value,
   description: () => pageDesc.value,
@@ -343,7 +434,31 @@ body { margin: 0; }
 .theme-btn:hover { border-color: var(--green); color: var(--green-d); }
 .lang a { text-decoration: none; color: var(--mut); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
-main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; }
+.logo-light { display: block; }
+.logo-dark { display: none; }
+[data-theme="dark"] .logo-light { display: none; }
+[data-theme="dark"] .logo-dark { display: block; }
+.hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
+.layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; }
+.layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
+.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; margin-top: 3rem; }
+.ad { border: 1.5px dashed var(--input-line); border-radius: 12px; padding: 0.9rem; background: var(--card); color: var(--mut); font-size: 0.85rem; text-align: center; }
+.ad-label { display: inline-block; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; }
+.ad a { color: var(--green-d); font-weight: 700; }
+.ad.infeed { margin-bottom: 0.8rem; }
+.werben { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem; margin: 2rem 0; text-align: left; }
+.werben h2 { text-align: center; }
+.werben > p { text-align: center; }
+.ad-form { display: flex; flex-direction: column; gap: 0.7rem; max-width: 520px; margin: 0 auto; }
+.ad-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+.ad-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; font-weight: 600; }
+.ad-form input, .ad-form select, .ad-form textarea { padding: 0.6rem 0.8rem; border: 2px solid var(--input-line); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; }
+.ad-form button { padding: 0.7rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 10px; cursor: pointer; }
+.ad-form button:hover { background: var(--green-d); }
+.done { text-align: center; color: var(--green-d); font-weight: 700; }
+.error { text-align: center; color: #dc2626; }
+.small { font-size: 0.78rem; }
+@media (max-width: 1250px) { .rail { display: none; } }
 .hero { text-align: center; padding: 3rem 0 1.5rem; }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; font-weight: 800; color: var(--green-d); margin: 0 0 0.6rem; }
 .hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
