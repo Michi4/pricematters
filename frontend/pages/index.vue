@@ -28,7 +28,7 @@
           <span class="ad-label">{{ t('ads.label') }}</span>
           <p><strong>{{ t('ads.sidebar') }}</strong></p>
           <p class="mut small">{{ t('ads.sidebarSub') }}</p>
-          <a href="#werben">{{ t('ads.cta') }}</a>
+          <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a>
         </div>
       </aside>
 
@@ -139,45 +139,31 @@
         </article>
         <div v-if="i === 1 && sorted.length > 3" class="ad infeed">
           <span class="ad-label">{{ t('ads.label') }}</span>
-          <p>{{ t('ads.infeed') }} <a href="#werben">{{ t('ads.cta') }}</a></p>
+          <p>{{ t('ads.infeed') }} <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a></p>
         </div>
         </template>
       </section>
 
-      <section v-if="!searched" class="marketing">
-        <h2>{{ t('example.title') }}</h2>
-        <p class="mut">{{ t('example.note') }}</p>
-        <article v-for="e in examples" :key="e.t" class="card" :class="{ best: e.best }">
-          <div class="card-top">
-            <span v-if="e.best" class="best-badge">{{ t('results.best') }}</span>
-            <span class="store">Amazon</span>
-          </div>
-          <div class="card-main">
-            <div class="thumb placeholder"><img src="/logo.svg" alt="" width="44" height="44" /></div>
-            <div class="card-body">
-          <h2>{{ e.t }}</h2>
-          <div class="numbers">
-            <span class="price">{{ money(e.price) }}</span>
-            <span class="qty">{{ e.qty }}</span>
-            <span class="unitprice">{{ moneyBare(e.per) }} {{ sym }} / {{ e.base }}</span>
-          </div>
-            </div>
-          </div>
-        </article>
-        <h2>{{ t('how.title') }}</h2>
-        <div class="steps">
-          <div><strong>1 · {{ t('how.s1t') }}</strong><p>{{ t('how.s1d') }}</p></div>
-          <div><strong>2 · {{ t('how.s2t') }}</strong><p>{{ t('how.s2d') }}</p></div>
-          <div><strong>3 · {{ t('how.s3t') }}</strong><p>{{ t('how.s3d') }}</p></div>
-        </div>
-        <div class="trust">
-          <div><strong>{{ t('trust.t1') }}</strong><p>{{ t('trust.d1') }}</p></div>
-          <div><strong>{{ t('trust.t2') }}</strong><p>{{ t('trust.d2') }}</p></div>
-          <div><strong>{{ t('trust.t3') }}</strong><p>{{ t('trust.d3') }}</p></div>
-        </div>
-      </section>
+    </main>
 
-      <section id="werben" class="werben">
+      <aside class="rail" aria-hidden="false">
+        <div class="ad">
+          <span class="ad-label">{{ t('ads.label') }}</span>
+          <p><strong>{{ t('ads.sidebar') }}</strong></p>
+          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
+          <a href="#" @click.prevent="adOpen = true">{{ t('ads.cta') }}</a>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <p class="disclosure">{{ t('footer.disclosure') }}</p>
+      <p>{{ t('footer.by') }} <a href="https://websters.at" target="_blank" rel="noopener">websters.at</a> · <button class="linklike" @click="adOpen = true">{{ t('ads.title') }}</button></p>
+    </footer>
+
+    <div v-if="adOpen" class="modal-backdrop" @click.self="adOpen = false">
+      <div class="modal" role="dialog" aria-modal="true">
+        <button class="modal-x" @click="adOpen = false" aria-label="Close">✕</button>
         <h2>{{ t('ads.title') }}</h2>
         <p class="mut">{{ t('ads.text') }}</p>
         <form v-if="!adSent" class="ad-form" @submit.prevent="submitContact">
@@ -196,23 +182,8 @@
           <p v-if="adError" class="error">{{ t('ads.error') }}</p>
         </form>
         <p v-else class="done">{{ t('ads.done') }}</p>
-      </section>
-    </main>
-
-      <aside class="rail" aria-hidden="false">
-        <div class="ad">
-          <span class="ad-label">{{ t('ads.label') }}</span>
-          <p><strong>{{ t('ads.sidebar') }}</strong></p>
-          <p class="mut small">{{ t('ads.sidebarSub') }}</p>
-          <a href="#werben">{{ t('ads.cta') }}</a>
-        </div>
-      </aside>
+      </div>
     </div>
-
-    <footer>
-      <p class="disclosure">{{ t('footer.disclosure') }}</p>
-      <p>{{ t('footer.made') }} · {{ brand.name }}</p>
-    </footer>
   </div>
 </template>
 
@@ -221,7 +192,7 @@ import { convertPer, DISPLAY_TARGETS } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
-const { t, tm, locale, locales } = useI18n();
+const { t, locale, locales } = useI18n();
 const localePath = useLocalePath();
 const switchLocalePath = useSwitchLocalePath();
 const route = useRoute();
@@ -300,6 +271,7 @@ const adSlot = ref('rail');
 const adSending = ref(false);
 const adSent = ref(false);
 const adError = ref(false);
+const adOpen = ref(false);
 
 async function submitContact() {
   adSending.value = true;
@@ -322,8 +294,6 @@ const popularApi = ref<string[]>([]);
 const popular = computed(() => popularApi.value.length ? popularApi.value : (locale.value === 'de'
   ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
   : ['Rice', 'Coffee', 'Protein', 'Peanut butter']));
-const examples = computed(() => tm('example.items') as any[]);
-
 const CURRENCY: Record<string, string> = { de: '€', at: '€', fr: '€', com: '$', 'co.uk': '£' };
 const sym = computed(() => CURRENCY[marketplace.value] || '€');
 const money = (cents: number) => `${(cents / 100).toFixed(2)} ${sym.value}`;
@@ -441,14 +411,18 @@ body { margin: 0; }
 .hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
-.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; margin-top: 3rem; }
-.ad { border: 1.5px dashed var(--input-line); border-radius: 12px; padding: 0.9rem; background: var(--card); color: var(--mut); font-size: 0.85rem; text-align: center; }
+.rail { width: 170px; min-width: 170px; position: sticky; top: 1rem; align-self: stretch; display: flex; }
+.rail .ad { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; }
+.ad { border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem; background: transparent; color: var(--mut); font-size: 0.85rem; text-align: center; }
 .ad-label { display: inline-block; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; }
 .ad a { color: var(--green-d); font-weight: 700; }
 .ad.infeed { margin-bottom: 0.8rem; }
-.werben { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem; margin: 2rem 0; text-align: left; }
-.werben h2 { text-align: center; }
-.werben > p { text-align: center; }
+.linklike { background: none; border: none; padding: 0; color: var(--green-d); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+.modal { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 1.6rem; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; }
+.modal h2 { margin-top: 0; text-align: center; }
+.modal > p { text-align: center; }
+.modal-x { position: absolute; top: 0.7rem; right: 0.9rem; background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--mut); }
 .ad-form { display: flex; flex-direction: column; gap: 0.7rem; max-width: 520px; margin: 0 auto; }
 .ad-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
 .ad-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; font-weight: 600; }

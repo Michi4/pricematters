@@ -42,15 +42,6 @@
     },
     "store": { "all": "Alle", "label": "Shops" }
   },
-  "example": {
-    "title": "So sieht ein Vergleich aus",
-    "note": "Beispiel – echte Grundpreis-Mathematik, keine Mondpreise.",
-    "items": [
-      { "t": "Bio Basmati Reis, 2 x 1kg", "price": 1299, "qty": "2 kg", "per": 650, "base": "kg", "best": true },
-      { "t": "Premium Langkorn Reis, 500g", "price": 499, "qty": "500 g", "per": 998, "base": "kg", "best": false },
-      { "t": "Bio Kaffee Bohnen, 500g", "price": 899, "qty": "500 g", "per": 1798, "base": "kg", "best": false }
-    ]
-  },
   "how": {
     "title": "So funktioniert's",
     "s1t": "Suchen",
@@ -87,7 +78,7 @@
     "done": "Danke! Wir melden uns in Kürze."
   },
   "footer": {
-    "disclosure": "Als Amazon-Partner verdienen wir an qualifizierten Käufen – für dich entstehen keine Mehrkosten.",
-    "made": "Gebaut mit ♥ in Österreich."
+    "by": "Ein Projekt von",
+    "disclosure": "Als Amazon-Partner verdienen wir an qualifizierten Käufen – für dich entstehen keine Mehrkosten."
   }
 }

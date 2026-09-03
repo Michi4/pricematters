@@ -5,7 +5,7 @@ export default defineAppConfig({
     'pricematters.app': {
       name: 'PriceMatters',
       slogansEN: [
-        'Because unlike *size*, pricematters.',
+        'Because unlike size, pricematters.',
         "Don't guess. Know the price per kilo.",
         'Amazon shows the price. We show the truth.',
         'Small pack, big scam — check the unit price.',
@@ -13,7 +13,7 @@ export default defineAppConfig({
         'Same Amazon. Same product. Lower price per kilo.',
       ],
       slogansDE: [
-        'Denn anders als die *Größe* zählt hier der Preis.',
+        'Denn anders als die Größe zählt hier der Preis.',
         'Kleinpackung, Riesen-Abzocke — check den Grundpreis.',
         'Amazon zeigt den Preis. Wir zeigen die Wahrheit.',
         'Wer nachrechnet, zahlt weniger.',
@@ -54,13 +54,13 @@ export default defineAppConfig({
     default: {
       name: 'PriceMatters',
       slogansEN: [
-        'Because unlike *size*, pricematters.',
+        'Because unlike size, pricematters.',
         "Don't guess. Know the price per kilo.",
         'Amazon shows the price. We show the truth.',
         'Same Amazon. Same product. Lower price per kilo.',
       ],
       slogansDE: [
-        'Denn anders als die *Größe* zählt hier der Preis.',
+        'Denn anders als die Größe zählt hier der Preis.',
         'Wer nachrechnet, zahlt weniger.',
         'Amazon zeigt den Preis. Wir zeigen die Wahrheit.',
         'Gleiches Produkt, gleicher Shop — billiger pro Kilo.',
