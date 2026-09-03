@@ -33,6 +33,9 @@ PROXY_SOURCES = [
     ("iplocate-http", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/http.txt", "text"),
     ("iplocate-https", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/protocols/https.txt", "text"),
     ("iplocate-de", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/countries/DE/proxies.txt", "text"),
+    ("iplocate-all", "https://raw.githubusercontent.com/iplocate/free-proxy-list/main/all-proxies.txt", "prefixed"),
+    ("thespeedx", "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt", "text"),
+    ("clarketm", "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt", "text"),
     ("geonode", "https://proxylist.geonode.com/api/proxy-list?limit=100&page=1&sort_by=lastChecked"
                 "&sort_type=desc&protocols=http%2Chttps", "geonode"),
 ]
@@ -85,6 +88,15 @@ def _fetch_source(name: str, url: str, fmt: str) -> list[str]:
             import json as _json
             items = _json.loads(body).get("data", [])
             return [f"{d['ip']}:{d['port']}" for d in items if d.get("ip") and d.get("port")]
+        if fmt == "prefixed":
+            # e.g. "socks5://1.2.3.4:1080" / "http://1.2.3.4:8080" (iplocate all-proxies.txt)
+            out = []
+            for l in body.splitlines():
+                m = re.match(r"^(socks5|socks4|https?)://(\d+\.\d+\.\d+\.\d+:\d+)\s*$", l.strip())
+                if m:
+                    scheme, addr = m.groups()
+                    out.append(addr if scheme in ("http", "https") else f"{scheme}://{addr}")
+            return out
         return [l.strip() for l in body.splitlines()
                 if re.match(r"^\d+\.\d+\.\d+\.\d+:\d+$", l.strip())]
     except Exception:
@@ -101,7 +113,7 @@ def _pool() -> list[str]:
             return _good + [p for p in _pool if p not in _good]
     merged: list[str] = []
     for name, url, fmt in PROXY_SOURCES:
-        for px in _fetch_source(name, url, fmt):
+        for px in _fetch_source(name, url, fmt)[:150]:  # per-source quota: diversity beats depth
             if px not in merged:
                 merged.append(px)
     with _lock:
@@ -142,30 +154,35 @@ def _open(url: str, opener=None) -> str | None:
 _socks_lock = threading.Lock()
 
 
-def _via_ipvanish(url: str) -> str | None:
-    """Your private IPVanish SOCKS5 (Frankfurt for amazon.de). Needs PySocks."""
-    creds = _ipvanish()
-    if not creds:
-        return None
+def _via_socks(url: str, host: str, port: int, user: str = "", pw: str = "", version=None) -> str | None:
+    """Generic SOCKS fetch (PySocks). Used for IPVanish AND free socks pools."""
     try:
         import socket
         import socks
     except ImportError:
         return None
-    user, pw, hostport = creds
-    host, _, port = hostport.partition(":")
     import socket as _sockmod
     orig = _sockmod.socket
     with _socks_lock:
         try:
-            socks.set_default_proxy(socks.SOCKS5, host, int(port or 1080),
-                                    username=user, password=pw)
+            socks.set_default_proxy(version or socks.SOCKS5, host, port,
+                                    username=user or None, password=pw or None)
             _sockmod.socket = socks.socksocket
             return _open(url)
         except Exception:
             return None
         finally:
             _sockmod.socket = orig
+
+
+def _via_ipvanish(url: str) -> str | None:
+    """Your private IPVanish SOCKS5 (Frankfurt for amazon.de). Needs PySocks."""
+    creds = _ipvanish()
+    if not creds:
+        return None
+    user, pw, hostport = creds
+    host, _, port = hostport.partition(":")
+    return _via_socks(url, host, int(port or 1080), user, pw)
 
 
 def _fetch(url: str) -> str | None:
@@ -194,11 +211,22 @@ def _fetch(url: str) -> str | None:
         return html
     pool = _pool()
     random.shuffle(pool)
-    for px in pool[:8]:
+    for px in pool[:10]:
         try:
+            if px.startswith("socks"):
+                m = re.match(r"(socks[45]?)://(\d+\.\d+\.\d+\.\d+):(\d+)", px)
+                if not m:
+                    continue
+                import socks as _socks
+                ver = _socks.SOCKS4 if m.group(1) == "socks4" else _socks.SOCKS5
+                html = _via_socks(url, m.group(2), int(m.group(3)), version=ver)
+                if html:
+                    _remember_good(px)
+                    return html
+                continue
             req = urllib.request.Request(url, headers={"User-Agent": UA})
-            req.set_proxy(px, "http")
-            req.set_proxy(px, "https")
+            req.set_proxy(px if "://" in px else f"http://{px}", "http")
+            req.set_proxy(px if "://" in px else f"http://{px}", "https")
             with urllib.request.urlopen(req, timeout=12) as r:
                 html = r.read().decode("utf-8", errors="ignore")
             if "Enter the characters you see" in html or len(html) < 20000:
