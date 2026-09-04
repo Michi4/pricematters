@@ -112,6 +112,15 @@ def _serpapi_used(r, index: int) -> int:
         return 0
 
 
+def _keys_by_usage(keys: list, r) -> list:
+    """Key indices sorted by ascending monthly usage (stable: ties keep order).
+    Least-used-first spreads the monthly quota evenly instead of burning
+    key #1 to its alert threshold while #2/#3 sit idle."""
+    order = list(range(len(keys)))
+    order.sort(key=lambda i: _serpapi_used(r, i))
+    return order
+
+
 def _price_to_cents(price) -> int | None:
     if price is None:
         return None
@@ -207,8 +216,8 @@ def serpapi_search(query: str, marketplace: str, page: int = 1):
     domain = a["domain"]
     r = _get_redis()
     last_err = "no keys"
-    for i, key in enumerate(keys):
-        _serpapi_bump(r, i)
+    for i in _keys_by_usage(keys, r):
+        key = keys[i]
         try:
             data = _get("https://serpapi.com/search.json", {
                 "api_key": key, "engine": "amazon", "k": query,
@@ -235,6 +244,9 @@ def serpapi_search(query: str, marketplace: str, page: int = 1):
                 # problem — don't burn the remaining keys on it
                 last_err = "serpapi returned 0 priced products"
                 break
+            # count only served requests: SerpApi doesn't bill client-side
+            # failures/timeouts, so bumping before _get overcounted (248 vs 220)
+            _serpapi_bump(r, i)
             serpapi_usage_check(i, _serpapi_used(r, i), _serpapi_quota())
             return out
         except Exception as e:
@@ -249,8 +261,10 @@ def serpapi_product(asin: str, domain: str = "amazon.de"):
     keys = _serpapi_keys()
     if not keys:
         raise RuntimeError("SERPAPI_API_KEY not set")
+    r = _get_redis()
     last_err = "no keys"
-    for key in keys:
+    for i in _keys_by_usage(keys, r):
+        key = keys[i]
         try:
             data = _get("https://serpapi.com/search.json", {
                 "api_key": key, "engine": "amazon_product", "asin": asin,
@@ -275,6 +289,7 @@ def serpapi_product(asin: str, domain: str = "amazon.de"):
                 reviews = int(str(reviews).replace(".", "").replace(",", "")) if reviews else None
             except ValueError:
                 reviews = None
+            _serpapi_bump(r, i)  # served product lookup — count it (was never counted)
             return {"title": title, "price_cents": _price_to_cents(price),
                     "image": image, "rating": rating, "reviews": reviews}
         except Exception as e:

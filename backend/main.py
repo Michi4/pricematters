@@ -616,24 +616,37 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
             if all_mk:
                 # merge all markets: same string typed anywhere sums up;
-                # marketplaces kept per query so we know the source language
+                # marketplaces kept per query so we know the source language.
+                # lower()-grouping: "Protein"/"protein" are the same query;
+                # display keeps the most recent casing. Python dedupes mps.
                 cur.execute(
-                    """SELECT query, COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
-                       FROM searches
-                       WHERE created_at > now() - interval '30 days' AND query <> ''
-                       GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
+                    """SELECT q, c, mps FROM (
+                         SELECT lower(query) AS lq,
+                                (array_agg(query ORDER BY created_at DESC))[1] AS q,
+                                COUNT(*) AS c, array_agg(marketplace) AS mps
+                         FROM searches
+                         WHERE created_at > now() - interval '30 days' AND query <> ''
+                         GROUP BY lq
+                       ) s
+                       ORDER BY c DESC, q DESC LIMIT %s""",
                     (max(limit * 2, 8),),
                 )
                 rows = cur.fetchall()
             else:
                 cur.execute(
-                    """SELECT query, COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
-                       FROM searches
-                       WHERE marketplace = %s AND created_at > now() - interval '30 days'
-                         AND query <> ''
-                       GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
+                    """SELECT q, c, mps FROM (
+                         SELECT lower(query) AS lq,
+                                (array_agg(query ORDER BY created_at DESC))[1] AS q,
+                                COUNT(*) AS c, array_agg(marketplace) AS mps
+                         FROM searches
+                         WHERE marketplace = %s AND created_at > now() - interval '30 days'
+                           AND query <> ''
+                         GROUP BY lq
+                       ) s
+                       ORDER BY c DESC, q DESC LIMIT %s""",
                     (marketplace, max(limit * 2, 8)),
                 )
+                rows = cur.fetchall()
                 rows = cur.fetchall()
         # translate chips to the selected UI language.
         # source language per query: de-ish markets store German queries,

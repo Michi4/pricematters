@@ -84,14 +84,24 @@ def serpapi_key_failed(index: int, err: str, query: str = "", marketplace: str =
 
 
 def serpapi_usage_check(index: int, used: int, quota: int):
-    """Warn when a key approaches its monthly limit (80% / 95%)."""
+    """Warn when a key approaches its monthly limit (80% / 95%).
+    Message reflects least-used rotation: with spare keys configured the
+    load spreads automatically, so no panic wording."""
     if quota <= 0:
         return
+    try:
+        from providers import _serpapi_keys  # local import: no import cycle
+        n_keys = len(_serpapi_keys())
+    except Exception:
+        n_keys = 1
     pct = used / quota
     if pct >= 0.95:
+        tail = (f"{n_keys} key(s) configured — rotation spreads load, "
+                f"upgrade the plan once all keys saturate."
+                if n_keys > 1 else
+                "Add another SERPAPI_API_KEYS entry or upgrade the plan.")
         emit(f"serp95-{index}-{_ym()}",
-             f"SerpApi key #{index + 1} at {used}/{quota} monthly requests (95%+). "
-             f"Add another SERPAPI_API_KEYS entry or upgrade the plan.",
+             f"SerpApi key #{index + 1} at {used}/{quota} monthly requests (95%+). {tail}",
              severity="warn", cooldown_s=604800)
     elif pct >= 0.80:
         emit(f"serp80-{index}-{_ym()}",
@@ -189,11 +199,14 @@ def check_milestones():
         if today >= 10:
             r.set(rk, today)
     elif today > best:
+        # only celebrate meaningful records: +25% (min +5) over the old best —
+        # at 28 searches/day every third search would otherwise be a "record"
         r.set(rk, today)
-        emit(f"recday-{today}",
-             f"Record day: {today} searches (previous best {best}). "
-             f"Something is resonating!",
-             severity="info", cooldown_s=3600)
+        if today >= best + max(5, best // 4):
+            emit(f"recday-{today}",
+                 f"Record day: {today} searches (previous best {best}). "
+                 f"Something is resonating!",
+                 severity="info", cooldown_s=21600)
 
     # traffic spike: far more searches in the last hour than the usual rate
     if last_hour >= 15 and last_hour >= max(4 * baseline, baseline + 10):

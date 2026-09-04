@@ -10,7 +10,7 @@ Policy (per key = provider:marketplace:query):
     can never sit stale longer than MIN_TTL after its next lookup.
   - size guard: when the cache is full (many keys / Redis memory high),
     new TTLs scale DOWN so cold entries evaporate instead of piling up.
-MAX_TTL is 7 days. (The old 24h ceiling cited Amazon PA-API ToS, which binds
+MAX_TTL is 14 days. (The old 24h ceiling cited Amazon PA-API ToS, which binds
 the API response itself — this cache serves SerpApi/scrape snapshots whose
 freshness is guarded by the price fingerprint above, not by the clock.)
 
@@ -20,9 +20,9 @@ import json
 import os
 import time
 
-MIN_TTL = 2 * 3600        # 2h  — volatile / brand-new keys
-BASE_TTL = 24 * 3600      # 24h — default
-MAX_TTL = 7 * 24 * 3600   # 7d  — stable prices, stable queries
+MIN_TTL = 6 * 3600        # 6h  — volatile / brand-new keys
+BASE_TTL = 48 * 3600      # 48h — default
+MAX_TTL = 14 * 24 * 3600  # 14d — stable prices, stable queries
 MEM_LIMIT = 500       # in-memory fallback cap
 SIZE_SOFT_LIMIT = 5000  # beyond this many keys, TTLs shrink
 
@@ -48,7 +48,10 @@ def _size_factor(n_keys: int) -> float:
 
 
 def _ttl(hits_24h: int, stable_refreshes: int, n_keys: int) -> int:
-    popularity = 1.0 if hits_24h < 5 else (0.5 if hits_24h < 50 else 0.3)
+    # popularity floors: even the hottest query never refreshes more often
+    # than 12h — hot-query freshness is guarded by the price fingerprint
+    # (stale price ⇒ TTL reset to MIN on next lookup), not by the clock.
+    popularity = 1.0 if hits_24h < 5 else (0.5 if hits_24h < 50 else 0.35)
     stability = min(1.0 + 0.25 * stable_refreshes, MAX_TTL / BASE_TTL)
     ttl = BASE_TTL * popularity * stability * _size_factor(n_keys)
     return int(max(MIN_TTL, min(MAX_TTL, ttl)))
