@@ -84,6 +84,10 @@
     "t3": "Free",
     "d3": "Forever, no account needed."
   },
+  "theme": {
+    "darkHint": "The site looks best in light mode – dark mode works, but isn't 100% perfect. Careful: Amazon & external pages are blindingly bright – turn on Dark Reader or you'll get flash-banged on every click.",
+    "ok": "Got it"
+  },
   "ads": {
     "label": "Ad",
     "sidebar": "Your banner here",

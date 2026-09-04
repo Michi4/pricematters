@@ -6,6 +6,7 @@
         <span>{{ brandName }}</span>
       </NuxtLink>
       <span v-if="unlocked && lastRefresh" class="hint mut small">upd {{ lastRefresh }}</span>
+      <button class="iconbtn" :title="dark ? 'Light mode' : 'Dark mode'" @click="toggleTheme">{{ dark ? '☀' : '☾' }}</button>
       <button v-if="unlocked" class="iconbtn" title="Refresh" @click="reload">↻</button>
       <button v-if="unlocked" class="iconbtn" title="Lock" @click="lock">⏻</button>
     </header>
@@ -254,6 +255,7 @@ const openInq = ref(-1);
 const days = ref(30);
 const hours = ref(48);
 const auto = ref(true);
+const dark = ref(false);
 const sel = ref(-1);
 const delSure = ref<number | null>(null);
 let delTimer: any = null;
@@ -386,12 +388,22 @@ function lock() {
   unlocked.value = false;
   try { sessionStorage.removeItem('pm_admin_key'); } catch { /* ignore */ }
 }
+/* same mechanism as the main site: data-theme attr + shared pm_theme key */
+function toggleTheme() {
+  dark.value = !dark.value;
+  document.documentElement.dataset.theme = dark.value ? 'dark' : 'light';
+  try { localStorage.setItem('pm_theme', dark.value ? 'dark' : 'light'); } catch { /* ignore */ }
+}
 watch(auto, () => setTimer());
 function setTimer() {
   if (timer) { clearInterval(timer); timer = null; }
   if (auto.value && unlocked.value) timer = setInterval(() => load(), 60000);
 }
 onMounted(() => {
+  try {
+    dark.value = localStorage.getItem('pm_theme') === 'dark';
+    document.documentElement.dataset.theme = dark.value ? 'dark' : 'light';
+  } catch { /* ignore */ }
   try {
     const saved = sessionStorage.getItem('pm_admin_key');
     if (saved) { key.value = saved; load(); }
@@ -403,7 +415,9 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 
 <style>
 .adm { font-family: system-ui, -apple-system, sans-serif; color: #1a2e1f; background: #f6faf7; min-height: 100vh; }
+.adm.dark { color: #dbe7dd; background: #0d140f; }
 .adm .top { display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1.2rem; background: #fff; border-bottom: 1px solid #e3ece4; position: sticky; top: 0; z-index: 5; }
+.adm.dark .top { background: #121a14; border-bottom-color: #1f2b22; }
 .adm .top .hint { margin-left: auto; }
 .adm .logo { display: flex; gap: 0.5rem; align-items: center; font-weight: 800; color: inherit; text-decoration: none; margin-right: auto; }
 .adm main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
@@ -411,25 +425,37 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .gate h1 { font-size: 1.3rem; }
 .adm .gate form { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
 .adm .gate input { padding: 0.7rem 1rem; border: 2px solid #d5e2d7; border-radius: 10px; font-size: 1rem; background: #fff; color: inherit; max-width: 100%; }
+.adm.dark .gate input { background: #121a14; border-color: #2a3b2f; }
 .adm .gate button { padding: 0.7rem 1.4rem; font-weight: 700; background: #12813c; color: #fff; border: none; border-radius: 10px; cursor: pointer; }
 .adm .err { color: #dc2626; margin-top: 0.7rem; }
+.adm.dark .err { color: #f87171; }
 .adm .toolbar { display: flex; align-items: center; gap: 1.2rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .adm .toolbar select { padding: 0.3rem 0.5rem; border: 1px solid #d5e2d7; border-radius: 8px; background: #fff; color: inherit; }
+.adm.dark .toolbar select { background: #121a14; border-color: #2a3b2f; }
 .adm .krow { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin-bottom: 1.4rem; }
 .adm .kpi { background: #fff; border: 1px solid #e3ece4; border-radius: 12px; padding: 1rem; text-align: center; min-width: 0; }
+.adm.dark .kpi { background: #121a14; border-color: #1f2b22; }
 .adm .kv { display: block; font-size: 1.7rem; font-weight: 800; color: #12813c; font-variant-numeric: tabular-nums; }
+.adm.dark .kv { color: #4ade80; }
 .adm .kl { color: #55655a; font-size: 0.85rem; overflow-wrap: anywhere; }
+.adm.dark .kl { color: #8fa897; }
 .adm .panel { background: #fff; border: 1px solid #e3ece4; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; min-width: 0; overflow: hidden; }
+.adm.dark .panel { background: #121a14; border-color: #1f2b22; }
 .adm .panel h2 { margin: 0 0 0.6rem; font-size: 1rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .adm .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.8rem; }
 .adm table { width: 100%; border-collapse: collapse; font-size: 0.9rem; table-layout: fixed; }
 .adm td, .adm th { padding: 0.35rem 0.4rem; border-bottom: 1px solid #eef3ee; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.adm.dark td, .adm.dark th { border-bottom-color: #1f2b22; }
 .adm .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: #55655a; }
+.adm.dark .num { color: #8fa897; }
 .adm .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adm .mut { color: #55655a; }
+.adm.dark .mut { color: #8fa897; }
 .adm .small { font-size: 0.8rem; }
 .adm .tfilter { margin-left: auto; padding: 0.15rem 0.5rem; border: 1px solid #d5e2d7; border-radius: 8px; font-size: 0.8rem; background: #fff; color: inherit; max-width: 9rem; }
+.adm.dark .tfilter { background: #0d140f; border-color: #2a3b2f; }
 .adm .ctrr { color: #12813c; margin-left: 0.35rem; }
+.adm.dark .ctrr { color: #4ade80; }
 .adm .bars { display: flex; align-items: flex-end; gap: 2px; height: 120px; }
 .adm .bars.dense { gap: 1px; }
 .adm .bcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; cursor: pointer; border-radius: 3px; }
@@ -438,31 +464,40 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .bar { border-radius: 2px 2px 0 0; min-height: 1px; }
 .adm .bar.s { background: #12813c; }
 .adm .bar.c { background: #86efac; }
+.adm.dark .bar.c { background: #22c55e; }
 .adm .baxis { display: flex; justify-content: space-between; margin-top: 0.3rem; }
 .adm .barinfo { margin: 0.5rem 0 0; font-size: 0.9rem; }
 .adm .sysgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem 1.2rem; overflow-wrap: anywhere; }
 .adm .sysgrid .chain { grid-column: 1 / -1; }
 .adm .serpk { display: flex; align-items: center; gap: 0.5rem; }
 .adm .meter { flex: 0 1 6rem; height: 0.45rem; border-radius: 999px; background: #e3ece4; overflow: hidden; }
+.adm.dark .meter { background: #1f2b22; }
 .adm .meter .fill { display: block; height: 100%; background: #22c55e; border-radius: 999px; transition: width 0.4s; }
 .adm .meter .fill.warn { background: #f59e0b; }
 .adm .meter .fill.crit { background: #dc2626; }
 .adm .pill { display: inline-block; border: 1px solid #d5e2d7; border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; margin: 0.1rem 0.15rem 0.1rem 0; }
+.adm.dark .pill { border-color: #2a3b2f; }
 .adm .pill.first { border-color: #12813c; color: #12813c; font-weight: 700; }
+.adm.dark .pill.first { border-color: #4ade80; color: #4ade80; }
 .adm .dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-right: 0.45rem; }
 .adm .dot.ok { background: #22c55e; }
 .adm .dot.bad { background: #dc2626; }
 .adm .inq { border: 1px solid #eef3ee; border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; cursor: pointer; transition: border-color 0.12s; min-width: 0; }
+.adm.dark .inq { border-color: #1f2b22; }
 .adm .inq:hover { border-color: #12813c; }
 .adm .inq-row { display: flex; gap: 0.4rem 0.9rem; flex-wrap: wrap; align-items: baseline; }
 .adm .inq-mail { overflow-wrap: anywhere; }
 .adm .inq-meta { margin-left: auto; white-space: nowrap; }
 .adm .delbtn { background: none; border: 1px solid transparent; border-radius: 6px; color: #dc2626; cursor: pointer; font-size: 0.8rem; padding: 0 0.3rem; }
+.adm.dark .delbtn { color: #f87171; }
 .adm .delbtn:hover, .adm .delbtn.sure { border-color: #dc2626; font-weight: 700; }
 .adm .inq-msg { margin: 0.6rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f6faf7; border-radius: 8px; padding: 0.6rem; font-size: 0.9rem; }
+.adm.dark .inq-msg { background: #0d140f; }
 .adm .linklike { background: none; border: none; color: #12813c; font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.adm.dark .linklike { color: #4ade80; }
 .adm .foot { margin-top: 2rem; }
 .adm .iconbtn { background: none; border: 1px solid #d5e2d7; border-radius: 8px; padding: 0.2rem 0.55rem; cursor: pointer; font-size: 0.95rem; color: inherit; }
+.adm.dark .iconbtn { border-color: #2a3b2f; }
 .adm .iconbtn:hover { border-color: #12813c; }
 @media (max-width: 640px) {
   .adm .inq-meta { margin-left: 0; }
