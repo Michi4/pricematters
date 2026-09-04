@@ -192,6 +192,11 @@ export function targetLabel(id: string): string {
   return DISPLAY_TARGETS.find((t) => t.id === id)?.label || id;
 }
 
+// package-quantity units as shown next to the price (proper capitals: TB/GB/MB)
+export function qtyLabel(unit: string): string {
+  return { tb: 'TB', gb: 'GB', mb: 'MB' }[unit] || unit;
+}
+
 export function convertPer(per: number, base: string, target: string): number | null {
   if (target === base) return per;
   if (base === 'kg' && target === '100g') return per / 10;

@@ -119,9 +119,8 @@
 
         <div v-if="sorted.length" class="toolbar">
           <div class="segmented" role="group" :aria-label="t('results.sort.label')">
-            <button :class="{ active: sortKey === 'unit' }" @click="sortKey = 'unit'">{{ t('results.sort.shortUnit') }}</button>
-            <button :class="{ active: sortKey === 'priceAsc' }" @click="sortKey = 'priceAsc'">{{ t('results.sort.shortAsc') }}</button>
-            <button :class="{ active: sortKey === 'priceDesc' }" @click="sortKey = 'priceDesc'">{{ t('results.sort.shortDesc') }}</button>
+            <button :class="{ active: sortKey.startsWith('unit') }" @click="toggleSort('unit')">{{ t('results.sort.shortUnit') }}<span class="arr" aria-hidden="true">{{ sortKey === 'unitAsc' ? '↓' : sortKey === 'unitDesc' ? '↑' : '' }}</span></button>
+            <button :class="{ active: sortKey.startsWith('price') }" @click="toggleSort('price')">{{ t('results.sort.shortPrice') }}<span class="arr" aria-hidden="true">{{ sortKey === 'priceAsc' ? '↓' : sortKey === 'priceDesc' ? '↑' : '' }}</span></button>
           </div>
           <div class="segmented view" role="group">
             <button :class="{ active: viewMode === 'list' }" :aria-label="t('results.viewList')" :title="t('results.viewList')" @click="viewMode = 'list'">
@@ -162,13 +161,11 @@
               </div>
             </div>
             <div class="fsec">
-              <span class="flabel">{{ t('results.filter.kind') }}</span>
-              <div class="pills">
-                <button :class="{ active: kindFilter === 'all' }" @click="kindFilter = 'all'">{{ t('results.filter.kinds.all') }}</button>
-                <button :class="{ active: kindFilter === 'mass' }" @click="kindFilter = 'mass'">{{ t('results.filter.kinds.mass') }}</button>
-                <button :class="{ active: kindFilter === 'volume' }" @click="kindFilter = 'volume'">{{ t('results.filter.kinds.volume') }}</button>
-                <button :class="{ active: kindFilter === 'count' }" @click="kindFilter = 'count'">{{ t('results.filter.kinds.count') }}</button>
-                <button :class="{ active: kindFilter === 'storage' }" @click="kindFilter = 'storage'">{{ t('results.filter.kinds.storage') }}</button>
+              <span class="flabel">{{ t('results.filter.minUnit') }} / {{ t('results.filter.maxUnit') }}</span>
+              <div class="prange">
+                <input v-model="minUnit" type="number" min="0" step="0.01" :placeholder="`0 ${targetLabel(displayUnit)}`" :aria-label="t('results.filter.minUnit')" />
+                <span aria-hidden="true">–</span>
+                <input v-model="maxUnit" type="number" min="0" step="0.01" :placeholder="`∞ ${targetLabel(displayUnit)}`" :aria-label="t('results.filter.maxUnit')" />
               </div>
             </div>
           </div>
@@ -184,9 +181,9 @@
         <p v-else-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
         <template v-for="(r, i) in paged" :key="r.asin">
-        <article class="card" :class="{ best: i === 0 && page === 1 && sortKey === 'unit' && shownUnit(r) }">
+        <article class="card" :class="{ best: i === 0 && page === 1 && sortKey === 'unitAsc' && shownUnit(r) }">
           <div class="card-top">
-            <span v-if="i === 0 && page === 1 && sortKey === 'unit' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
+            <span v-if="i === 0 && page === 1 && sortKey === 'unitAsc' && shownUnit(r)" class="best-badge">{{ t('results.best') }}</span>
             <span class="store">{{ r.store || 'Amazon' }}</span>
           </div>
           <div class="card-main">
@@ -196,7 +193,7 @@
           <h2>{{ r.title }}</h2>
           <div class="numbers">
             <span class="price">{{ money(r.priceCents) }}</span>
-            <span v-if="r.qty" class="qty">{{ fmtQty(r.qty.value) }} {{ r.qty.unit }}</span>
+            <span v-if="r.qty" class="qty">{{ fmtQty(r.qty.value) }} {{ qtyLabel(r.qty.unit) }}</span>
             <span v-if="shownUnit(r)" class="unitprice">
               {{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ displayUnit }}
             </span>
@@ -278,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { convertPer, DISPLAY_TARGETS, extractQuantity, targetLabel, unitPrice } from '../lib/units';
+import { convertPer, DISPLAY_TARGETS, extractQuantity, qtyLabel, targetLabel, unitPrice } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
@@ -336,10 +333,10 @@ async function loadFaves() {
 }
 function faveQtyLabel(f: any) {
   // actual package unit (e.g. "1 kg", "600 ml"), not a computed unit price
-  if (f.qty?.value && f.qty?.unit) return `${fmtQty(f.qty.value)} ${f.qty.unit}`;
+  if (f.qty?.value && f.qty?.unit) return `${fmtQty(f.qty.value)} ${qtyLabel(f.qty.unit)}`;
   try {
     const q = extractQuantity(f.title || '');
-    return q ? `${fmtQty(q.value)} ${q.unit}` : null;
+    return q ? `${fmtQty(q.value)} ${qtyLabel(q.unit)}` : null;
   } catch { return null; }
 }
 
@@ -470,12 +467,18 @@ const results = ref<any[]>([]);
 const meta = ref<any>({});
 const pending = ref(false);
 const searched = ref(false);
-const sortKey = ref('unit');
+const sortKey = ref('unitAsc');
+// one button per dimension, click toggles direction (↓ ascending, ↑ descending)
+function toggleSort(dim: 'unit' | 'price') {
+  if (dim === 'unit') sortKey.value = sortKey.value === 'unitAsc' ? 'unitDesc' : 'unitAsc';
+  else sortKey.value = sortKey.value === 'priceAsc' ? 'priceDesc' : 'priceAsc';
+}
 const displayUnit = ref('kg');
 const storeFilter = ref('all');
 const minPrice = ref('');
 const maxPrice = ref('');
-const kindFilter = ref('all');
+const minUnit = ref('');
+const maxUnit = ref('');
 const page = ref(1);
 // perPage + view survive reloads (localStorage, guarded for SSR)
 const perPage = ref(10);
@@ -610,7 +613,8 @@ async function search() {
     storeFilter.value = 'all';
     minPrice.value = '';
     maxPrice.value = '';
-    kindFilter.value = 'all';
+    minUnit.value = '';
+    maxUnit.value = '';
     page.value = 1;
     trackEvent('search', {
       query: q.value, marketplace: marketplace.value,
@@ -651,15 +655,24 @@ const unitOptions = computed(() => {
 const sorted = computed(() => {
   const min = parseFloat(minPrice.value) * 100;
   const max = parseFloat(maxPrice.value) * 100;
+  const umin = parseFloat(minUnit.value);
+  const umax = parseFloat(maxUnit.value);
   const arr = results.value.filter((r: any) => {
     if (storeFilter.value !== 'all' && (r.store || 'Amazon') !== storeFilter.value) return false;
-    if (kindFilter.value !== 'all' && r.qty?.kind !== kindFilter.value) return false;
     if (!isNaN(min) && minPrice.value !== '' && r.priceCents < min) return false;
     if (!isNaN(max) && maxPrice.value !== '' && r.priceCents > max) return false;
+    // unit-price range applies in the selected display unit (€/TB etc.)
+    if (minUnit.value !== '' || maxUnit.value !== '') {
+      const u = shownUnit(r);
+      if (u === null) return false;
+      if (!isNaN(umin) && minUnit.value !== '' && u < umin) return false;
+      if (!isNaN(umax) && maxUnit.value !== '' && u > umax) return false;
+    }
     return true;
   });
   const by = {
-    unit: (a: any, b: any) => (shownUnit(a) ?? Infinity) - (shownUnit(b) ?? Infinity),
+    unitAsc: (a: any, b: any) => (shownUnit(a) ?? Infinity) - (shownUnit(b) ?? Infinity),
+    unitDesc: (a: any, b: any) => (shownUnit(b) ?? -Infinity) - (shownUnit(a) ?? -Infinity),
     priceAsc: (a: any, b: any) => a.priceCents - b.priceCents,
     priceDesc: (a: any, b: any) => b.priceCents - a.priceCents,
   }[sortKey.value] as (a: any, b: any) => number;
@@ -668,18 +681,19 @@ const sorted = computed(() => {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)));
 const paged = computed(() => sorted.value.slice((page.value - 1) * perPage.value, page.value * perPage.value));
-watch([sortKey, storeFilter, kindFilter, minPrice, maxPrice, displayUnit, perPage], () => { page.value = 1; });
+watch([sortKey, storeFilter, minPrice, maxPrice, minUnit, maxUnit, displayUnit, perPage], () => { page.value = 1; });
 
 // "no match" empty state offers a one-click way out of over-strict filters
 function resetFilters() {
   storeFilter.value = 'all';
   minPrice.value = '';
   maxPrice.value = '';
-  kindFilter.value = 'all';
+  minUnit.value = '';
+  maxUnit.value = '';
   page.value = 1;
 }
 const filtersActive = computed(() =>
-  storeFilter.value !== 'all' || minPrice.value !== '' || maxPrice.value !== '' || kindFilter.value !== 'all');
+  storeFilter.value !== 'all' || minPrice.value !== '' || maxPrice.value !== '' || minUnit.value !== '' || maxUnit.value !== '');
 
 // ---- SEO (SSR, per brand + locale) ----
 const url = useRequestURL();
@@ -764,6 +778,8 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .ad-label { display: inline-block; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; }
 .ad a { color: var(--green-d); font-weight: 700; }
 .ad.infeed { margin-bottom: 0.8rem; }
+/* grid view: the promo slot becomes a regular dashed card cell, not a banner strip */
+.results.grid .ad.infeed { margin-bottom: 0; border: 2px dashed var(--input-line); border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; padding: 1.4rem 1rem; min-height: 100%; }
 .linklike { background: none; border: none; padding: 0; color: var(--green-d); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
 .modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
 .modal { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 1.6rem; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; }
@@ -858,13 +874,14 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
 .segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
 .segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.segmented .arr { display: inline-block; min-width: 1em; margin-left: 0.3rem; color: var(--green-d); }
+.segmented button.active .arr { color: inherit; }
 .segmented.view button { padding: 0.45rem 0.7rem; display: inline-flex; }
 .segmented.view svg { width: 1.05rem; height: 1.05rem; }
 @media (max-width: 639px) { .segmented.view { display: none; } }
 /* grid view (desktop only): compact vertical cards */
 .results.grid .meta-row, .results.grid .toolbar, .results.grid .filters,
-.results.grid .banner, .results.grid .empty, .results.grid .pager,
-.results.grid .ad.infeed { grid-column: 1 / -1; }
+.results.grid .banner, .results.grid .empty, .results.grid .pager { grid-column: 1 / -1; }
 @media (min-width: 640px) {
   .results.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.9rem; align-items: stretch; }
   .results.grid .card { margin-bottom: 0; display: flex; flex-direction: column; }

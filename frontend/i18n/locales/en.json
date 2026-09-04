@@ -38,7 +38,8 @@
       "name": "Name A–Z",
       "shortUnit": "Unit price",
       "shortAsc": "Price ↑",
-      "shortDesc": "Price ↓"
+      "shortDesc": "Price ↓",
+      "shortPrice": "Price"
     },
     "unit": {
       "label": "Show as"
@@ -55,7 +56,9 @@
         "volume": "Volume (L, mL)",
         "count": "Count",
         "storage": "Storage (GB, TB)"
-      }
+      },
+      "minUnit": "Min unit price",
+      "maxUnit": "Max unit price"
     },
     "store": {
       "all": "All",

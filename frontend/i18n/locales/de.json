@@ -38,7 +38,8 @@
       "name": "Name A–Z",
       "shortUnit": "Grundpreis",
       "shortAsc": "Preis ↑",
-      "shortDesc": "Preis ↓"
+      "shortDesc": "Preis ↓",
+      "shortPrice": "Preis"
     },
     "unit": {
       "label": "Anzeigen als"
@@ -55,7 +56,9 @@
         "volume": "Volumen (l, ml)",
         "count": "Stückzahl",
         "storage": "Speicher (GB, TB)"
-      }
+      },
+      "minUnit": "Min-Grundpreis",
+      "maxUnit": "Max-Grundpreis"
     },
     "store": {
       "all": "Alle",
