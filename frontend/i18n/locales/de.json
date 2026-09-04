@@ -11,7 +11,7 @@
   },
   "results": {
     "count": "{n} Produkte",
-    "zone": "Preise für {zone}",
+    "zone": "Preise von {zone}",
     "groups": {
       "eu": "Europa",
       "world": "Weltweit"
@@ -48,17 +48,10 @@
     "filter": {
       "min": "Min-Preis",
       "max": "Max-Preis",
-      "kind": "Nur",
-      "onlyUnit": "Nur mit Grundpreis",
-      "kinds": {
-        "all": "Alles",
-        "mass": "Gewicht (kg, g)",
-        "volume": "Volumen (l, ml)",
-        "count": "Stückzahl",
-        "storage": "Speicher (GB, TB)"
-      },
-      "minUnit": "Min-Grundpreis",
-      "maxUnit": "Max-Grundpreis"
+      "size": "Paketgröße",
+      "minSize": "Min-Größe",
+      "maxSize": "Max-Größe",
+      "sizeUnit": "Einheit"
     },
     "store": {
       "all": "Alle",

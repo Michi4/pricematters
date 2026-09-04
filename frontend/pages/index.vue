@@ -161,11 +161,14 @@
               </div>
             </div>
             <div class="fsec">
-              <span class="flabel">{{ t('results.filter.minUnit') }} / {{ t('results.filter.maxUnit') }}</span>
+              <span class="flabel">{{ t('results.filter.size') }}</span>
               <div class="prange">
-                <input v-model="minUnit" type="number" min="0" step="0.01" :placeholder="`0 ${targetLabel(displayUnit)}`" :aria-label="t('results.filter.minUnit')" />
+                <input v-model="minSize" type="number" min="0" step="any" placeholder="0" :aria-label="t('results.filter.minSize')" />
                 <span aria-hidden="true">–</span>
-                <input v-model="maxUnit" type="number" min="0" step="0.01" :placeholder="`∞ ${targetLabel(displayUnit)}`" :aria-label="t('results.filter.maxUnit')" />
+                <input v-model="maxSize" type="number" min="0" step="any" placeholder="∞" :aria-label="t('results.filter.maxSize')" />
+                <select v-model="sizeUnit" class="sunit" :aria-label="t('results.filter.sizeUnit')">
+                  <option v-for="o in sizeUnitOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+                </select>
               </div>
             </div>
           </div>
@@ -275,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { convertPer, DISPLAY_TARGETS, extractQuantity, qtyLabel, targetLabel, unitPrice } from '../lib/units';
+import { convertPer, convertQty, DISPLAY_TARGETS, extractQuantity, qtyLabel, targetLabel, unitPrice } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
@@ -477,8 +480,14 @@ const displayUnit = ref('kg');
 const storeFilter = ref('all');
 const minPrice = ref('');
 const maxPrice = ref('');
-const minUnit = ref('');
-const maxUnit = ref('');
+const minSize = ref('');
+const maxSize = ref('');
+const sizeUnit = ref('kg');
+// size-filter unit options follow the selected display unit (fluid stays
+// fluid, storage stays storage); targetLabel gives proper capitals (TB/GB/MB)
+const sizeUnitOptions = computed(() =>
+  DISPLAY_TARGETS.filter((t) => t.bases[0] === (DISPLAY_TARGETS.find((x) => x.id === displayUnit.value)?.bases[0] || 'kg'))
+    .map((t) => ({ id: t.id, label: t.label })));
 const page = ref(1);
 // perPage + view survive reloads (localStorage, guarded for SSR)
 const perPage = ref(10);
@@ -578,8 +587,11 @@ const countryName = (cc: string) => {
 };
 const sym = computed(() => CURRENCY[marketplace.value] || '€');
 const zoneLabel = computed(() => {
+  // honest labeling: say which Amazon storefront we actually query
+  // (de/at/ch all query amazon.de — AT/CH get delivery-zip pricing attempts,
+  // but the storefront is the same, so "Preise für Österreich" would be wrong)
   const m = MARKETS.find((x) => x.code === marketplace.value);
-  return m ? `${countryName(m.cc)} · ${m.domain}` : marketplace.value;
+  return m?.domain || 'amazon.de';
 });
 const thumbUrl = (src: string | undefined) =>
   src ? src.replace(/\._[^.]+_\./, '._AC_SY160_.') : src;
@@ -613,8 +625,8 @@ async function search() {
     storeFilter.value = 'all';
     minPrice.value = '';
     maxPrice.value = '';
-    minUnit.value = '';
-    maxUnit.value = '';
+    minSize.value = '';
+    maxSize.value = '';
     page.value = 1;
     trackEvent('search', {
       query: q.value, marketplace: marketplace.value,
@@ -655,18 +667,21 @@ const unitOptions = computed(() => {
 const sorted = computed(() => {
   const min = parseFloat(minPrice.value) * 100;
   const max = parseFloat(maxPrice.value) * 100;
-  const umin = parseFloat(minUnit.value);
-  const umax = parseFloat(maxUnit.value);
+  const smin = parseFloat(minSize.value);
+  const smax = parseFloat(maxSize.value);
   const arr = results.value.filter((r: any) => {
     if (storeFilter.value !== 'all' && (r.store || 'Amazon') !== storeFilter.value) return false;
     if (!isNaN(min) && minPrice.value !== '' && r.priceCents < min) return false;
     if (!isNaN(max) && maxPrice.value !== '' && r.priceCents > max) return false;
-    // unit-price range applies in the selected display unit (€/TB etc.)
-    if (minUnit.value !== '' || maxUnit.value !== '') {
-      const u = shownUnit(r);
-      if (u === null) return false;
-      if (!isNaN(umin) && minUnit.value !== '' && u < umin) return false;
-      if (!isNaN(umax) && maxUnit.value !== '' && u > umax) return false;
+    // package-size range ("no more than 2 TB", "at least 500 g") in the
+    // picked size unit; items without a parseable qty are filtered out
+    if (minSize.value !== '' || maxSize.value !== '') {
+      const q = r.qty;
+      if (!q) return false;
+      const size = convertQty(q.value, q.unit, sizeUnit.value);
+      if (size === null) return false;
+      if (!isNaN(smin) && minSize.value !== '' && size < smin) return false;
+      if (!isNaN(smax) && maxSize.value !== '' && size > smax) return false;
     }
     return true;
   });
@@ -681,19 +696,19 @@ const sorted = computed(() => {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)));
 const paged = computed(() => sorted.value.slice((page.value - 1) * perPage.value, page.value * perPage.value));
-watch([sortKey, storeFilter, minPrice, maxPrice, minUnit, maxUnit, displayUnit, perPage], () => { page.value = 1; });
+watch([sortKey, storeFilter, minPrice, maxPrice, minSize, maxSize, sizeUnit, displayUnit, perPage], () => { page.value = 1; });
 
 // "no match" empty state offers a one-click way out of over-strict filters
 function resetFilters() {
   storeFilter.value = 'all';
   minPrice.value = '';
   maxPrice.value = '';
-  minUnit.value = '';
-  maxUnit.value = '';
+  minSize.value = '';
+  maxSize.value = '';
   page.value = 1;
 }
 const filtersActive = computed(() =>
-  storeFilter.value !== 'all' || minPrice.value !== '' || maxPrice.value !== '' || minUnit.value !== '' || maxUnit.value !== '');
+  storeFilter.value !== 'all' || minPrice.value !== '' || maxPrice.value !== '' || minSize.value !== '' || maxSize.value !== '');
 
 // ---- SEO (SSR, per brand + locale) ----
 const url = useRequestURL();
@@ -857,6 +872,7 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .pills button.active { background: var(--green); border-color: var(--green); color: #fff; }
 .prange { display: flex; align-items: center; gap: 0.5rem; color: var(--mut); }
 .prange input { width: 100%; min-width: 0; padding: 0.45rem 0.6rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
+.prange .sunit { width: auto; flex: 0 0 auto; padding: 0.45rem 0.35rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
 .freset { margin: 0 1.1rem 1rem; }
 .card-main { display: flex; gap: 1rem; align-items: center; }
 .thumb { width: 84px; height: 84px; min-width: 84px; flex: none; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }

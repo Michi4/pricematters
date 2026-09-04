@@ -207,3 +207,23 @@ export function convertPer(per: number, base: string, target: string): number | 
   if (base === 'gb' && target === 'mb') return per / 1000;
   return null;
 }
+
+// plain package-size conversion (NOT per-price): "500 g" -> 0.5 kg,
+// "750 GB" -> 0.75 TB, "1.5 l" -> 1500 ml. Incompatible kinds (600 ml
+// asked for in TB) return null so size filters can skip those items.
+export function convertQty(value: number, unit: string, target: string): number | null {
+  if (!isFinite(value) || value <= 0) return null;
+  let m = 1;
+  if (target === '100g') { target = 'g'; m = 0.01; }
+  else if (target === '100ml') { target = 'ml'; m = 0.01; }
+  if (unit === target) return value * m;
+  const base: Record<string, [string, number]> = {
+    mg: ['g', 0.001], g: ['g', 1], kg: ['g', 1000],
+    ml: ['ml', 1], cl: ['ml', 10], l: ['ml', 1000],
+    pcs: ['pcs', 1],
+    mb: ['mb', 1], gb: ['mb', 1000], tb: ['mb', 1e6],
+  };
+  const u = base[unit]; const t = base[target];
+  if (!u || !t || u[0] !== t[0]) return null;
+  return ((value * u[1]) / t[1]) * m;
+}

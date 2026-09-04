@@ -11,7 +11,7 @@
   },
   "results": {
     "count": "{n} products",
-    "zone": "Prices for {zone}",
+    "zone": "Prices from {zone}",
     "groups": {
       "eu": "Europe",
       "world": "Worldwide"
@@ -48,17 +48,10 @@
     "filter": {
       "min": "Min price",
       "max": "Max price",
-      "kind": "Only",
-      "onlyUnit": "Only with unit price",
-      "kinds": {
-        "all": "All",
-        "mass": "Weight (kg, g)",
-        "volume": "Volume (L, mL)",
-        "count": "Count",
-        "storage": "Storage (GB, TB)"
-      },
-      "minUnit": "Min unit price",
-      "maxUnit": "Max unit price"
+      "size": "Package size",
+      "minSize": "Min size",
+      "maxSize": "Max size",
+      "sizeUnit": "Unit"
     },
     "store": {
       "all": "All",
