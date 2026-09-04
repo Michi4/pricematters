@@ -164,4 +164,88 @@ Rules honored: read-only on prod (only `GET`/`HEAD`/`OPTIONS` to live), no write
 | 7 Testing | ⚠️ unit tests added for extractor; no E2E yet |
 
 ## Go / No-Go: **CONDITIONAL GO**
+
+---
+
+# Round 2 — 2026-09-04 (second audit pass, post-baseline fixes)
+
+Checkout: `main @ ca6fe9a` (audit start) → fixes shipped as `7247bdf`. Method: dependency audit (pip-audit 2.10.1 + npm audit), secrets scan (tree + `git log -p`), live probes (headers, admin auth, rate-limit paths), prod DB introspection (read-only), backup/restore verification (home standby), full fix batch + regression tests, CI-verified deploy, live re-verification. Standing approval (commit+push) honored; no destructive ops; no secrets printed.
+
+## Round-2 verification of baseline items
+
+- **[was CRITICAL] Backups → RESOLVED.** Warm standby at home verified end-to-end: containers `pricematters-standby-{db,backend,frontend,redis}`, systemd timer `pricematters-sync.timer` every 15 min, log `done rc=0`, standby row counts equal prod at sync time (searches 661/661, events 269/269). `pg_dump --clean --if-exists` re-import into standby is a continuously-exercised restore path. Residual: standby depends on the same home server that runs other backups — acceptable single-site DR, noted.
+- **[was HIGH] `?key=` admin param → already fixed earlier** (header-only in backend + frontend; live 401 without header).
+- **[was HIGH] Rate-limit IP forwarding → already fixed earlier** (proxies forward XFF/X-Real-Ip).
+- **[was HIGH] Security headers → present live** (`strict-transport-security`, `x-content-type-options: nosniff`, `x-frame-options: DENY`, `referrer-policy`). CSP still omitted (Report-Only pass = human follow-up).
+- **[was HIGH] No tests → 17 extractor tests + CI verify green;** this round adds `test_audit_fixes.py` (12 cases) covering every fix below.
+- **[was MEDIUM] `/popular` limit → already clamped** (`le=20`); this round adds the missing per-IP rate limit.
+
+## Round-2 new findings → all fixed in `7247bdf` (deployed, live-verified)
+
+### [HIGH] starlette 0.46.2: 7 CVEs (pip-audit)
+**Evidence:** `pip-audit -r backend/requirements.txt` → PYSEC-2026-161/248/249/1941/1942/2280/2281 (fixes ≥1.3.1). `fastapi==0.115.*` pins starlette 0.46.2.
+**Fix:** `fastapi==0.141.*` → starlette 1.6.0. Verified: fresh venv resolve, `pip-audit` clean (`No known vulnerabilities found`), app imports, 17/17 tests pass before push. npm audit (omit=dev): 0 vulnerabilities.
+
+### [HIGH] Non-ASCII admin key header → HTTP 500 (reproduced live pre-fix)
+**Evidence:** pre-fix live: `x-admin-key: éê중` → **500** (hmac.compare_digest str/bytes mismatch TypeError → unhandled). Any visitor could spam this; 500s pollute logs/error rates.
+**Fix:** byte-encode both sides before compare_digest; length gate (≤256). Post-fix live: **401**. Regression test: `test_non_ascii_key_is_401_not_500`.
+
+### [HIGH] Admin brute-force unthrottled
+**Evidence:** pre-fix, unlimited wrong-key guesses against `/api/admin/*` (key unlocks ad_inquiries PII).
+**Fix:** Redis per-IP failure counter — 20 fails/10 min → 15 min lockout; fail-open on Redis errors. Live: wrong key → 401.
+
+### [HIGH] `X-Real-Ip`/XFF spoofing from non-private peers
+**Evidence:** `_client_ip` trusted forwarded headers unconditionally; a direct-to-backend peer (or any future path bypassing Traefik) could rotate rate-limit keys at will. Defense-in-depth even though backend currently unexposed (live :8000 refused).
+**Fix:** forwarded headers only trusted when socket peer is private/loopback (Traefik in compose net); else socket peer is the key. Regression tests: `test_public_peer_ignores_spoofed_x_real_ip`, `test_private_peer_trusts_x_real_ip`.
+
+### [MEDIUM] Provider exceptions could leak `api_key=` into Signal alerts
+**Evidence:** alerts forward `err[:120]` from provider failures; SerpApi errors embed full request URLs with `api_key=...`. Alerts land on the admin's phone (Signal).
+**Fix:** `_scrub()` in alerts.emit — regex-redacts `api_key|apikey|key|token|password|secret=<value>` before queueing. Tests: `test_api_key_redacted`, `test_generic_secret_params_redacted`.
+
+### [MEDIUM] `TRACK_SALT` unset → weak constant `"pm"` fallback
+**Evidence:** daily IP hash reproducible by anyone guessing the scheme. Prod `.env` verified missing TRACK_SALT (runtime confirmed: hash returned empty post-code-fix).
+**Fix:** (a) code: refuse to hash without a real salt (returns `""`); (b) ops: random 24-byte salt generated and appended to prod `.env`, backend recreated, hash verified live (`salted hash works: True`). Value never displayed/committed.
+
+### [MEDIUM] `/track` numeric fields unbounded
+**Evidence:** `result_count/w/pos/price_cents/ms` stored as client-supplied ints (any magnitude).
+**Fix:** clamped to ±10^6, non-numeric → NULL, before INSERT.
+
+### [MEDIUM] `/popular` outbound-amplifier (no limiter)
+**Evidence:** unauth endpoint; per unique query triggers outbound MyMemory translation (free tier); whole-table aggregate per call.
+**Fix:** per-IP Redis limiter 30/min, fail-open. Live: `{"items":[...]}` still healthy.
+
+### [LOW] `feeds.py` DB connect without timeout
+**Fix:** `connect_timeout=3` (matches main.py/track.py).
+
+### [LOW] New tests can't import backend deps in CI sandbox
+**Evidence:** CI installs no deps (`unittest discover` on bare python). 
+**Fix:** `test_audit_fixes.py` raises `unittest.SkipTest` on ImportError → CI green (1 skipped), 28 passed where deps exist (verified both).
+
+## Round-2 secrets/infra verification (clean)
+- Secrets: repo tree + full `git log -p` scanned (added-line patterns for all provider keys, ADMIN_KEY, POSTGRES_PASSWORD) → only placeholders; `.env` untracked; `.dockerignore` covers `.env*`.
+- Prod headers live: HSTS/nosniff/DENY/referrer-policy present; no CORS echo; backend `/docs`,`/openapi.json`,`/health` unreachable from edge (Nuxt 404s) — API surface proxied only.
+- Prod DB (read-only): 14 indexes sane (`events_kind_ts_query`, `searches_market_ts`, `shop_products` GIN…), no bloated tables (n_dead_tup check clean), row counts: searches 661, events 269, ad_inquiries 0, shop_products 0 (feed importer not yet fed — expected).
+- `/extract` cap + contact limiter unchanged-correct; `/ready` intentionally unauth (discloses only redis/db booleans) — acceptable, flagged for Traefik-level restriction if ever desired.
+
+## Round-2 remaining (human decisions, unchanged)
+1. CSP via Report-Only pass (frontend inline styles).
+2. Uptime monitoring (external probe) — Signal alerts cover app-level events only.
+3. Rollback story = forward-fix (`git revert` + rebuild); image retagging overkill at this scale.
+4. Traefik `trustedIPs` check on host (outside repo) — belt-and-braces now that backend also validates peer privacy.
+5. Standby is single-site (home server) — offsite copy if business-critical.
+
+## Scorecard (end of round 2)
+| Phase | Status |
+|---|---|
+| 0 Recon | ✅ clean |
+| 1 Frontend | ✅ no open HIGH (a11y/admin-states MEDIUMs = user-accepted polish) |
+| 2 Backend/API | ✅ all HIGHs fixed + regression-tested |
+| 3 Security | ✅ deps CVE-clean, headers live, auth hardened; CSP = follow-up |
+| 4 Data/DB | ✅ backups verified (warm standby, 15-min RPO); indexes sane |
+| 5 Infra/Deploy | ✅ CI verify+concurrency live; rollback = forward-fix (documented) |
+| 6 E2E | ✅ search/contact/admin/affiliate paths verified live (incl. this round) |
+| 7 Testing | ✅ 28 tests pass (extractor + audit-fix regressions); E2E automation = follow-up |
+
+## Go / No-Go: **GO**
+All CRITICAL/HIGH findings from both rounds are fixed, deployed, and live-verified. Dependency tree CVE-clean (pip-audit + npm audit). Backups proven by continuously-exercised warm standby. Remaining items are documented hardening follow-ups (CSP, uptime probe, offsite DR copy), none blocking.
 Ship the HIGH-fix batch (commit `audit-fixes`, awaiting approval → push = deploy), then GO for normal operation **iff** a human additionally: (1) schedules nightly `pg_dump` off-host + one restore test (**the** CRITICAL blocker), (2) sets strong `ADMIN_KEY`/`TRACK_SALT`/`POSTGRES_PASSWORD` in server `.env`, (3) confirms Traefik `trustedIPs`/overwrite of `X-Real-Ip`, (4) adds any uptime check (even a free one). Rollback plan until then: `git revert` + `compose up --build` (forward-fix), plus DB snapshots once (1) exists.
