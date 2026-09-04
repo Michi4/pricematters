@@ -176,10 +176,17 @@ def rainforest_search(query: str, marketplace: str, page: int = 1):
 
 
 def _serpapi_keys() -> list:
-    """SERPAPI_API_KEYS (comma list) wins; SERPAPI_API_KEY stays first for compat."""
-    keys = [k.strip() for k in os.getenv("SERPAPI_API_KEYS", "").split(",") if k.strip()]
+    """SERPAPI_API_KEYS (comma list) wins; SERPAPI_API_KEY stays first for compat.
+    Deduped: the same key listed twice would double-burn its monthly quota."""
+    seen: set = set()
+    keys: list = []
+    for k in os.getenv("SERPAPI_API_KEYS", "").split(","):
+        k = k.strip()
+        if k and k not in seen:
+            seen.add(k)
+            keys.append(k)
     legacy = os.getenv("SERPAPI_API_KEY", "").strip()
-    if legacy and legacy not in keys:
+    if legacy and legacy not in seen:
         keys.insert(0, legacy)
     return keys
 
