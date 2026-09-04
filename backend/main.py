@@ -7,6 +7,7 @@ Feed shops:  Awin & co via nightly CSV import (feeds.py) into Postgres,
 Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
 import ipaddress
+import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -607,27 +608,39 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             r.expire(pk, 90)
     except Exception:
         pass
+    # full result cached in Redis (per marketplace/lang/limit): popular barely
+    # changes hour to hour, and every miss costs a DB aggregate + translations
+    ck = f"pm:{CACHE_VERSION}:popular:{marketplace}:{lang}:{limit}"
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            raw = r.get(ck)
+            if raw:
+                return json.loads(raw)
+    except Exception:
+        pass
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
         if not url:
             return {"items": []}
         all_mk = marketplace in ("", "all", "*")
+        # queries normalized: lowercase + strip stray leading/trailing
+        # punctuation ("- olivenöl" is "olivenöl"); display variant = most
+        # frequent exact casing (mode), not last-typed casing
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
             if all_mk:
-                # merge all markets: same string typed anywhere sums up;
-                # marketplaces kept per query so we know the source language.
-                # lower()-grouping: "Protein"/"protein" are the same query;
-                # display keeps the most recent casing. Python dedupes mps.
                 cur.execute(
                     """SELECT q, c, mps FROM (
-                         SELECT lower(query) AS lq,
-                                (array_agg(query ORDER BY created_at DESC))[1] AS q,
-                                COUNT(*) AS c, array_agg(marketplace) AS mps
+                         SELECT btrim(lower(query), ' -.,!?;:()"''') AS lq,
+                                mode() WITHIN GROUP (ORDER BY query) AS q,
+                                COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
                          FROM searches
                          WHERE created_at > now() - interval '30 days' AND query <> ''
                          GROUP BY lq
                        ) s
+                       WHERE q <> ''
                        ORDER BY c DESC, q DESC LIMIT %s""",
                     (max(limit * 2, 8),),
                 )
@@ -635,18 +648,18 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             else:
                 cur.execute(
                     """SELECT q, c, mps FROM (
-                         SELECT lower(query) AS lq,
-                                (array_agg(query ORDER BY created_at DESC))[1] AS q,
-                                COUNT(*) AS c, array_agg(marketplace) AS mps
+                         SELECT btrim(lower(query), ' -.,!?;:()"''') AS lq,
+                                mode() WITHIN GROUP (ORDER BY query) AS q,
+                                COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
                          FROM searches
                          WHERE marketplace = %s AND created_at > now() - interval '30 days'
                            AND query <> ''
                          GROUP BY lq
                        ) s
+                       WHERE q <> ''
                        ORDER BY c DESC, q DESC LIMIT %s""",
                     (marketplace, max(limit * 2, 8)),
                 )
-                rows = cur.fetchall()
                 rows = cur.fetchall()
         # translate chips to the selected UI language.
         # source language per query: de-ish markets store German queries,
@@ -664,8 +677,17 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             if k not in seen:
                 seen.add(k)
                 out.append(text)
-        return {"items": out[:limit]}
-    except Exception:
+        out = out[:limit]
+        try:
+            from cache import _redis
+            r = _redis()
+            if r is not None and out:
+                r.setex(ck, 6 * 3600, json.dumps(out))
+        except Exception:
+            pass
+        return {"items": out}
+    except Exception as e:
+        print(f"[popular] {e}", flush=True)
         return {"items": []}
 
 
