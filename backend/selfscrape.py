@@ -246,13 +246,15 @@ def _fetch(url: str) -> str | None:
     return None
 
 
-def selfscrape_search(query: str, marketplace: str):
+def selfscrape_search(query: str, marketplace: str, page: int = 1):
     if not _enabled():
         raise RuntimeError("SELFSCRAPE_CONSENT=1 not set — enable explicitly (see selfscrape.py header).")
     from amazon_parse import parse_search
     from providers import amz
     domain = "www." + amz(marketplace)["domain"]
     url = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
+    if page > 1:
+        url += f"&page={page}"
     html = _fetch(url)
     if not html:
         raise RuntimeError("self-scrape failed (proxies blocked or budget spent) — try mock/scrapingbee.")

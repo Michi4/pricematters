@@ -227,3 +227,52 @@ export function convertQty(value: number, unit: string, target: string): number 
   if (!u || !t || u[0] !== t[0]) return null;
   return ((value * u[1]) / t[1]) * m;
 }
+
+// mass <-> volume bridge via DENSITY (kg per liter). Only products whose
+// density is a physical near-constant, so the bridge is "clean": vegetable
+// oils are 0.91-0.93 kg/l no matter the brand (±1% ≈ noise vs. shop price
+// gaps), milk 1.03, water 1.00, honey ~1.42. Everything else (detergents,
+// syrups, salt, cosmetics — 0.8 to 1.4+ per product) is NOT bridged: a
+// guessed density silently lies; no conversion just hides the value.
+const DENSITY: [RegExp, number][] = [
+  [/öl|oil/i, 0.92],           // olive/sunflower/rapeseed/coconut oil (0.91-0.93)
+  [/milch|milk(?!shake)/i, 1.03],
+  [/wasser|water(?!proof)/i, 1.0],
+  [/honig|honey/i, 1.42],
+  [/essig|vinegar/i, 1.01],
+  [/saft|juice|nekta?r|nectar/i, 1.04],
+  [/limonade|cola|limo\b|soda|softdrink|soft drink/i, 1.04],
+  [/wein|wine(?!glass)/i, 0.99],
+  [/bier|beer/i, 1.01],
+];
+
+export function densityOf(title: string): number | null {
+  if (!title) return null;
+  for (const [re, d] of DENSITY) if (re.test(title)) return d;
+  return null;
+}
+
+// per-price bridge: cents per base unit (kg | l) -> cents per target in the
+// other kind. 1 l weighs rho kg, so 1 kg = 1/rho liters: per_kg = per_l / rho
+// (10 €/l oil = 10.87 €/kg) and per_l = per_kg * rho (10 €/kg honey = 14.2 €/l).
+// Returns null when kinds don't bridge (storage/count) — never guesses.
+export function crossPer(per: number, base: string, target: string, rho: number): number | null {
+  const massT = target === 'kg' || target === '100g' || target === 'g';
+  const volT = target === 'l' || target === '100ml' || target === 'ml';
+  if (base === 'l' && massT) return convertPer(per / rho, 'kg', target);
+  if (base === 'kg' && volT) return convertPer(per * rho, 'l', target);
+  return null;
+}
+
+// package-size bridge for the size filter: 5 l oil = 4.6 kg, 25 kg salt
+// water = 20.8 l (mass = volume * rho, volume = mass / rho)
+export function crossQty(value: number, unit: string, target: string, rho: number): number | null {
+  const massT = target === 'kg' || target === '100g' || target === 'g';
+  const volT = target === 'l' || target === '100ml' || target === 'ml';
+  // volume -> liters first (density is defined per liter)
+  const liters = unit === 'l' ? value : unit === 'ml' ? value / 1000 : unit === 'cl' ? value / 100 : null;
+  const kg = unit === 'kg' ? value : unit === 'g' ? value / 1000 : unit === 'mg' ? value / 1e6 : null;
+  if (liters !== null && liters > 0 && massT) return convertQty(liters * rho, 'kg', target);
+  if (kg !== null && kg > 0 && volT) return convertQty(kg / rho, 'l', target);
+  return null;
+}

@@ -91,7 +91,7 @@ def _price_to_cents(price) -> int | None:
         return None
 
 
-def scrapingbee_search(query: str, marketplace: str):
+def scrapingbee_search(query: str, marketplace: str, page: int = 1):
     """1000 credits free, no credit card. domain=de -> amazon.de prices."""
     key = os.getenv("SCRAPINGBEE_API_KEY", "")
     if not key:
@@ -101,7 +101,7 @@ def scrapingbee_search(query: str, marketplace: str):
     data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
         "api_key": key, "query": query, "domain": domain,
         "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
-        "currency": amz(marketplace)["cur"], "pages": 1,
+        "currency": amz(marketplace)["cur"], "pages": max(1, min(int(page), 3)),
     })
     out = []
     for p in data.get("search_results", data.get("results", [])):
@@ -115,7 +115,7 @@ def scrapingbee_search(query: str, marketplace: str):
     return out
 
 
-def rainforest_search(query: str, marketplace: str):
+def rainforest_search(query: str, marketplace: str, page: int = 1):
     """Trial, then paid. Best structure (offers/sellers)."""
     key = os.getenv("RAINFOREST_API_KEY", "")
     if not key:
@@ -124,6 +124,7 @@ def rainforest_search(query: str, marketplace: str):
     data = _get("https://api.rainforestapi.com/request", {
         "api_key": key, "type": "search", "amazon_domain": domain,
         "search_term": query, "language": amz(marketplace)["lang"],
+        "page": str(max(1, int(page))),
     })
     out = []
     for p in data.get("search_results", []):
@@ -136,7 +137,7 @@ def rainforest_search(query: str, marketplace: str):
     return out
 
 
-def serpapi_search(query: str, marketplace: str):
+def serpapi_search(query: str, marketplace: str, page: int = 1):
     """SerpApi amazon engine (250 free searches/mo). organic_results -> rows."""
     key = os.getenv("SERPAPI_API_KEY", "")
     if not key:
@@ -147,6 +148,7 @@ def serpapi_search(query: str, marketplace: str):
         "api_key": key, "engine": "amazon", "k": query,
         "amazon_domain": domain, "language": a["lang"],
         "delivery_zip": a["zip"], "shipping_location": a["cc"],
+        "page": str(max(1, int(page))),
     })
     if data.get("error"):
         raise RuntimeError(f"serpapi: {data['error']}")
@@ -199,13 +201,16 @@ def serpapi_product(asin: str, domain: str = "amazon.de"):
             "image": image, "rating": rating, "reviews": reviews}
 
 
-def zenrows_search(query: str, marketplace: str):
+def zenrows_search(query: str, marketplace: str, page: int = 1):
     """Zenrows universal scrape (free tier) of the Amazon search page + shared parser."""
     key = os.getenv("ZENROWS_API_KEY", "")
     if not key:
         raise RuntimeError("ZENROWS_API_KEY not set")
     domain = "www." + amz(marketplace)["domain"]
     target = f"https://{domain}/s?k=" + urllib.parse.quote_plus(query)
+    if page > 1:
+        # Amazon search pagination: &page=N (1-based)
+        target += f"&page={page}"
     try:
         # premium_proxy (residential) beats Amazon's bot manager; plain datacenter IPs get challenged
         full = ("https://api.zenrows.com/v1/?" + urllib.parse.urlencode(

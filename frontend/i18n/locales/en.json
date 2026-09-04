@@ -60,7 +60,8 @@
     "emptyFiltered": "No matches with these filters.",
     "resetFilters": "Reset filters",
     "viewList": "List view",
-    "viewGrid": "Grid view"
+    "viewGrid": "Grid view",
+    "approxHint": "Converted via density (oil ≈ 0.92 kg/l, milk ≈ 1.03) — estimate"
   },
   "faves": {
     "title": "My Favorites",

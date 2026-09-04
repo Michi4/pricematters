@@ -119,8 +119,8 @@
 
         <div v-if="sorted.length" class="toolbar">
           <div class="segmented" role="group" :aria-label="t('results.sort.label')">
-            <button :class="{ active: sortKey.startsWith('unit') }" @click="toggleSort('unit')">{{ t('results.sort.shortUnit') }}<span class="arr" aria-hidden="true">{{ sortKey === 'unitAsc' ? '↓' : sortKey === 'unitDesc' ? '↑' : '' }}</span></button>
-            <button :class="{ active: sortKey.startsWith('price') }" @click="toggleSort('price')">{{ t('results.sort.shortPrice') }}<span class="arr" aria-hidden="true">{{ sortKey === 'priceAsc' ? '↓' : sortKey === 'priceDesc' ? '↑' : '' }}</span></button>
+            <button :class="{ active: sortKey.startsWith('unit') }" @click="toggleSort('unit')">{{ t('results.sort.shortUnit') }}<span class="arr" aria-hidden="true">{{ sortArrow('unit') }}</span></button>
+            <button :class="{ active: sortKey.startsWith('price') }" @click="toggleSort('price')">{{ t('results.sort.shortPrice') }}<span class="arr" aria-hidden="true">{{ sortArrow('price') }}</span></button>
           </div>
           <div class="segmented view" role="group">
             <button :class="{ active: viewMode === 'list' }" :aria-label="t('results.viewList')" :title="t('results.viewList')" @click="viewMode = 'list'">
@@ -198,7 +198,7 @@
             <span class="price">{{ money(r.priceCents) }}</span>
             <span v-if="r.qty" class="qty">{{ fmtQty(r.qty.value) }} {{ qtyLabel(r.qty.unit) }}</span>
             <span v-if="shownUnit(r)" class="unitprice">
-              {{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ displayUnit }}
+              <span v-if="shownInfo(r)?.approx" :title="t('results.approxHint')" class="approx">≈</span>{{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ targetLabel(displayUnit) }}
             </span>
             <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta cta-inline" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}*: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace })">
               {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}<span aria-hidden="true">*</span>
@@ -278,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { convertPer, convertQty, DISPLAY_TARGETS, extractQuantity, qtyLabel, targetLabel, unitPrice } from '../lib/units';
+import { convertPer, convertQty, crossPer, crossQty, densityOf, DISPLAY_TARGETS, extractQuantity, qtyLabel, targetLabel, unitPrice } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
@@ -343,6 +343,8 @@ function faveQtyLabel(f: any) {
   } catch { return null; }
 }
 
+// fave pill prices keep the native base (€/kg or €/l) — density conversion
+// for display-only choices happens on the results page, not here
 function faveUnit(f: any) {
   // prefer backend-provided qty (manual override), fall back to title extraction
   if (f.qty?.value && f.qty?.unit) {
@@ -476,6 +478,12 @@ function toggleSort(dim: 'unit' | 'price') {
   if (dim === 'unit') sortKey.value = sortKey.value === 'unitAsc' ? 'unitDesc' : 'unitAsc';
   else sortKey.value = sortKey.value === 'priceAsc' ? 'priceDesc' : 'priceAsc';
 }
+// arrow always visible (no layout jump); inactive buttons show their
+// natural first state ↓, active shows the current direction
+function sortArrow(dim: 'unit' | 'price') {
+  if (dim === 'unit') return sortKey.value === 'unitDesc' ? '↑' : '↓';
+  return sortKey.value === 'priceDesc' ? '↑' : '↓';
+}
 const displayUnit = ref('kg');
 const storeFilter = ref('all');
 const minPrice = ref('');
@@ -488,6 +496,11 @@ const sizeUnit = ref('kg');
 const sizeUnitOptions = computed(() =>
   DISPLAY_TARGETS.filter((t) => t.bases[0] === (DISPLAY_TARGETS.find((x) => x.id === displayUnit.value)?.bases[0] || 'kg'))
     .map((t) => ({ id: t.id, label: t.label })));
+// a new search can switch the display kind (storage -> fluid): pull the
+// size unit along so the select never points at an option that's gone
+watch(sizeUnitOptions, (opts) => {
+  if (!opts.some((o) => o.id === sizeUnit.value)) sizeUnit.value = opts[0]?.id || 'kg';
+});
 const page = ref(1);
 // perPage + view survive reloads (localStorage, guarded for SSR)
 const perPage = ref(10);
@@ -652,16 +665,33 @@ async function search() {
 }
 
 // per-item unit value in the selected display unit (cents), or null
-function shownUnit(r: any): number | null {
+// display unit price incl. density bridge: "5 l Olivenöl" can honestly show
+// €/kg because oil's density is a physical constant (~0.92 kg/l); unknown
+// liquids stay unconverted (shown as nothing in a mass unit, sort last)
+function shownInfo(r: any): { v: number; approx: boolean } | null {
   if (!r.unitPrice) return null;
-  return convertPer(r.unitPrice.per, r.unitPrice.base, displayUnit.value);
+  const direct = convertPer(r.unitPrice.per, r.unitPrice.base, displayUnit.value);
+  if (direct !== null) return { v: direct, approx: false };
+  const rho = densityOf(r.title || '');
+  if (rho === null) return null;
+  const v = crossPer(r.unitPrice.per, r.unitPrice.base, displayUnit.value, rho);
+  return v === null ? null : { v, approx: true };
+}
+function shownUnit(r: any): number | null {
+  return shownInfo(r)?.v ?? null;
 }
 
 const stores = computed(() => [...new Set(results.value.map((r: any) => r.store || 'Amazon'))]);
 const unitOptions = computed(() => {
   const bases = new Set(results.value.map((r: any) => r.unitPrice?.base).filter(Boolean));
-  const opts = DISPLAY_TARGETS.filter((u: any) => u.bases.some((b: string) => bases.has(b))).map((u: any) => u.id);
-  return opts.length ? opts : ['kg'];
+  const opts = new Set(DISPLAY_TARGETS.filter((u: any) => u.bases.some((b: string) => bases.has(b))).map((u: any) => u.id));
+  // density bridge: with oil/water/milk-style items both mass and volume
+  // pills make sense even if results only come in one kind
+  const bridgeable = results.value.some((r: any) =>
+    r.unitPrice && ['kg', 'l'].includes(r.unitPrice.base) && densityOf(r.title || '') !== null);
+  if (bridgeable) for (const id of ['kg', '100g', 'g', 'l', '100ml', 'ml']) opts.add(id);
+  const ordered = DISPLAY_TARGETS.filter((u: any) => opts.has(u.id)).map((u: any) => u.id);
+  return ordered.length ? ordered : ['kg'];
 });
 
 const sorted = computed(() => {
@@ -674,11 +704,14 @@ const sorted = computed(() => {
     if (!isNaN(min) && minPrice.value !== '' && r.priceCents < min) return false;
     if (!isNaN(max) && maxPrice.value !== '' && r.priceCents > max) return false;
     // package-size range ("no more than 2 TB", "at least 500 g") in the
-    // picked size unit; items without a parseable qty are filtered out
+    // picked size unit; density bridges l<->kg for known liquids
+    // (5 l oil counts as 4.6 kg); items without a parseable qty drop out
     if (minSize.value !== '' || maxSize.value !== '') {
       const q = r.qty;
       if (!q) return false;
-      const size = convertQty(q.value, q.unit, sizeUnit.value);
+      const rho = densityOf(r.title || '');
+      const size = convertQty(q.value, q.unit, sizeUnit.value)
+        ?? (rho !== null ? crossQty(q.value, q.unit, sizeUnit.value, rho) : null);
       if (size === null) return false;
       if (!isNaN(smin) && minSize.value !== '' && size < smin) return false;
       if (!isNaN(smax) && maxSize.value !== '' && size > smax) return false;
@@ -863,16 +896,17 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .filters summary svg { width: 1.05rem; height: 1.05rem; }
 .filters summary::-webkit-details-marker { display: none; }
 .fdot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--green); }
-.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.4rem; padding: 0.2rem 1.1rem 1rem; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem 1.4rem; padding: 0.2rem 1.1rem 1rem; }
 .fsec { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+/* German labels are long: pills and ranges may wrap but never overflow */
+.fsec .pills { max-width: 100%; }
+.fsec, .fgrid { overflow-wrap: anywhere; }
 .flabel { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mut); }
 .pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.pills button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 20px; padding: 0.35rem 0.9rem; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: border-color 0.12s, background 0.12s; }
-.pills button:hover { border-color: var(--green); }
-.pills button.active { background: var(--green); border-color: var(--green); color: #fff; }
-.prange { display: flex; align-items: center; gap: 0.5rem; color: var(--mut); }
-.prange input { width: 100%; min-width: 0; padding: 0.45rem 0.6rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
-.prange .sunit { width: auto; flex: 0 0 auto; padding: 0.45rem 0.35rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
+.pills button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 20px; padding: 0.35rem 0.9rem; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: border-color 0.12s, background 0.12s; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prange { display: flex; align-items: center; gap: 0.4rem; color: var(--mut); flex-wrap: nowrap; }
+.prange input { width: 100%; min-width: 0; flex: 1 1 0; padding: 0.45rem 0.6rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
+.prange .sunit { width: auto; flex: 0 0 auto; padding: 0.45rem 0.3rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; max-width: 7rem; }
 .freset { margin: 0 1.1rem 1rem; }
 .card-main { display: flex; gap: 1rem; align-items: center; }
 .thumb { width: 84px; height: 84px; min-width: 84px; flex: none; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
@@ -890,8 +924,9 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
 .segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
 .segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
-.segmented .arr { display: inline-block; min-width: 1em; margin-left: 0.3rem; color: var(--green-d); }
-.segmented button.active .arr { color: inherit; }
+/* arrow: fixed slot, dimmed when inactive, green when active — no layout shift */
+.segmented .arr { display: inline-block; width: 1em; margin-left: 0.25rem; color: var(--mut); opacity: 0.55; font-weight: 800; }
+.segmented button.active .arr { color: var(--green-d); opacity: 1; }
 .segmented.view button { padding: 0.45rem 0.7rem; display: inline-flex; }
 .segmented.view svg { width: 1.05rem; height: 1.05rem; }
 @media (max-width: 639px) { .segmented.view { display: none; } }
@@ -920,7 +955,7 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .store { background: #eef4ee; color: var(--mut); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; }
 .card h2 { margin: 0 0 0.55rem; font-size: 1.05rem; font-weight: 600; line-height: 1.35; }
 .numbers { display: flex; gap: 0.5rem 1.2rem; align-items: center; flex-wrap: wrap; }
-.numbers .cta-inline { margin-left: auto; padding: 0.5rem 1.1rem; min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.92rem; white-space: nowrap; }
+.numbers .cta-inline { margin-left: auto; padding: 0.5rem 1.1rem; min-height: 2.75rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.92rem; white-space: nowrap; }
 @media (max-width: 520px) {
   .numbers .cta-inline { margin-left: 0; flex: 1 1 100%; text-align: center; padding: 0.65rem; }
 }
@@ -928,6 +963,7 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .qty { color: var(--mut); font-size: 0.9rem; }
 .fave-unit { font-weight: 600; color: var(--ink); display: inline-block; min-width: 5.5rem; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
+.approx { font-weight: 400; opacity: 0.75; cursor: help; }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
 .card-body > .numbers { contain: inline-size; }

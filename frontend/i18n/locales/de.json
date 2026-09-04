@@ -60,7 +60,8 @@
     "emptyFiltered": "Keine Treffer mit diesen Filtern.",
     "resetFilters": "Filter zurücksetzen",
     "viewList": "Listenansicht",
-    "viewGrid": "Rasteransicht"
+    "viewGrid": "Rasteransicht",
+    "approxHint": "Mit Dichte umgerechnet (Öl ≈ 0,92 kg/l, Milch ≈ 1,03) — Richtwert"
   },
   "faves": {
     "title": "Meine Favoriten",

@@ -153,14 +153,25 @@ def _ai_fill(items: list[dict], titles: list[str | None], budget_s: float = 8.0)
 def _fetch_rows(cand: str, marketplace: str, variants: list[str], seen: set[str], timeout_s: float = 55.0) -> list:
     """Run one provider candidate with an overall deadline so a stalled source
     (living-room proxies, hung API) degrades to the next provider, not a hung worker."""
+    pages = max(1, min(3, int(os.getenv("SEARCH_PAGES", "2"))))
     def _run():
         out = []
         for v in variants:
-            for row in PROVIDERS[cand](v, marketplace):
-                if row[0] in seen:
-                    continue
-                seen.add(row[0])
-                out.append(row)
+            for pg in range(1, pages + 1):
+                fn = PROVIDERS[cand]
+                try:
+                    rows = fn(v, marketplace, pg) if pg > 1 else fn(v, marketplace)
+                except TypeError:
+                    # provider without page support (mock) — fetch once
+                    rows = fn(v, marketplace)
+                for row in rows:
+                    if row[0] in seen:
+                        continue
+                    seen.add(row[0])
+                    out.append(row)
+                # an empty first page means there is no second — stop early
+                if pg == 1 and not rows:
+                    break
         return out
     # no `with` block: its exit would join the hung thread and reintroduce the
     # stall; detach instead (internal per-call timeouts kill it on their own)
@@ -429,11 +440,49 @@ def contact(c: Contact, request: Request):
                 "INSERT INTO ad_inquiries (name, email, slot, message) VALUES (%s,%s,%s,%s)",
                 (c.name[:120], c.email[:160], c.slot[:40], c.message[:2000]),
             )
+        _send_inquiry_mail(c)  # best-effort; DB row is the source of truth
         return {"ok": True, "stored": "db"}
     except Exception as e:
         # no PII in logs: acknowledge without content
         print(f"[contact] inquiry stored to log ({e})", flush=True)
         return {"ok": True, "stored": "log"}
+
+
+def _send_inquiry_mail(c: Contact) -> bool:
+    """Best-effort SMTP (purelymail works with plain STARTTLS creds).
+    Env: SMTP_HOST, SMTP_PORT (default 465=SSL, 587=STARTTLS),
+    SMTP_USER, SMTP_PASS, SMTP_TO (default office@websters.at)."""
+    host = os.getenv("SMTP_HOST", "")
+    user = os.getenv("SMTP_USER", "")
+    pwd = os.getenv("SMTP_PASS", "")
+    if not (host and user and pwd):
+        return False
+    to = os.getenv("SMTP_TO", "office@websters.at")
+    port = int(os.getenv("SMTP_PORT", "465"))
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["Subject"] = f"PriceMatters Anfrage [{c.slot or 'allgemein'}] {c.name[:60]}"
+    msg["From"] = "PriceMatters <pricematters@websters.at>"
+    msg["To"] = to
+    reply = c.email.strip() or None
+    if reply:
+        msg["Reply-To"] = reply
+    msg.set_content(f"Name: {c.name}\nE-Mail: {c.email}\nSlot: {c.slot}\n\n{c.message}")
+    import smtplib
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=10) as s:
+                s.login(user, pwd)
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=10) as s:
+                s.starttls()
+                s.login(user, pwd)
+                s.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"[contact] smtp send failed ({type(e).__name__})", flush=True)
+        return False
 
 
 @app.get("/popular")

@@ -41,6 +41,12 @@ services:
     environment:
       DB_HOST: database
       REDIS_URL: redis://redis:6379/0
+      # email for /contact inquiries (purelymail); unset SMTP_* = DB-only
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_TO: ${SMTP_TO:-office@websters.at}
       DATABASE_URL: postgresql://${POSTGRES_USER:-pricematters}:${POSTGRES_PASSWORD:-pricematters}@database:5432/${POSTGRES_DB:-pricematters}
     expose:
       - "8000"
