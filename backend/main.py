@@ -210,6 +210,20 @@ def delete_inquiry(inq_id: int, request: Request):
         return JSONResponse(status_code=500, content={"ok": False, "error": "internal"})
 
 
+@app.get("/alerts")
+def get_alerts(request: Request):
+    """Poll endpoint for the home-server Signal bridge (admin-key protected).
+
+    Returns and clears queued alerts; each comes with the text ready for
+    Signal. Designed for a cron'd curl + notify_queue.sh on the home box.
+    """
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    from alerts import pending, usage_snapshot
+    items = pending()
+    return {"alerts": items, "serpapiUsage": usage_snapshot()}
+
+
 @app.get("/ready")
 def ready():
     """Readiness: can this instance actually serve /search right now?
@@ -338,6 +352,15 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
     meta["provider_used"] = used
     meta["demo"] = used in ("mock", "mock-fallback")
     name = used
+    try:
+        from alerts import provider_switch, mock_fallback
+        if meta.get("provider_errors") and used not in ("mock", "mock-fallback"):
+            first_failed = next(iter(meta["provider_errors"]))
+            provider_switch(marketplace, first_failed, used)
+        if used == "mock-fallback":
+            mock_fallback(marketplace)
+    except Exception:
+        pass
     ai_titles: list[str | None] = []
 
     def _add(row):
@@ -628,6 +651,14 @@ def _admin_ok(request: Request) -> bool:
     return bool(key) and hmac.compare_digest(supplied, key)
 
 
+def _serpapi_usage() -> list:
+    try:
+        from alerts import usage_snapshot
+        return usage_snapshot()
+    except Exception:
+        return []
+
+
 @app.get("/stats")
 def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12, le=168)):
     """Admin-only aggregates for the /admin page."""
@@ -713,6 +744,7 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
                 "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
                 "providerChain": os.getenv("DATA_PROVIDERS", "") or default_chain,
+                "serpapiUsage": _serpapi_usage(),
             }
             return out
     except Exception as e:

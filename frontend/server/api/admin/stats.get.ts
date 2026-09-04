@@ -4,7 +4,7 @@ export default defineEventHandler(async (event) => {
   const key = getQuery(event).key as string || getHeader(event, 'x-admin-key') || '';
   try {
     return await $fetch(`${config.backendUrl}/stats`, {
-      query: { days: getQuery(event).days || 30 },
+      query: { days: getQuery(event).days || 30, hours: getQuery(event).hours || 48 },
       headers: { 'x-admin-key': key },
     });
   } catch (e: any) {

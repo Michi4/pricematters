@@ -42,6 +42,8 @@ services:
       DB_HOST: database
       REDIS_URL: redis://redis:6379/0
       # email for /contact inquiries (purelymail); unset SMTP_* = DB-only
+      SERPAPI_API_KEYS: ${SERPAPI_API_KEYS:-}
+      SERPAPI_QUOTA: ${SERPAPI_QUOTA:-250}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}

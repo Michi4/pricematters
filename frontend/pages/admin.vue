@@ -195,6 +195,10 @@
             <div>Search pages: {{ data.system?.pages ?? 2 }}</div>
             <div v-if="avgRes">ø results/search: {{ avgRes }}</div>
             <div>Provider pinned: {{ data.system?.providerDefault || 'auto' }}</div>
+            <div v-for="u in data.system?.serpapiUsage || []" :key="u.index" class="serpk">
+              SerpApi key #{{ u.index }}: {{ u.used }}/{{ u.quota }}
+              <span class="meter"><span class="fill" :class="{ warn: u.used / u.quota > 0.8, crit: u.used / u.quota > 0.95 }" :style="{ width: Math.min(100, (u.used / u.quota) * 100) + '%' }"></span></span>
+            </div>
             <div class="chain">Fallback chain: <span v-for="(p, i) in chainList" :key="p + i" class="pill" :class="{ first: i === 0 }">{{ p }}</span></div>
           </div>
         </section>
@@ -465,6 +469,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .barinfo { margin: 0.5rem 0 0; font-size: 0.9rem; }
 .adm .sysgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem 1.2rem; overflow-wrap: anywhere; }
 .adm .sysgrid .chain { grid-column: 1 / -1; }
+.adm .serpk { display: flex; align-items: center; gap: 0.5rem; }
+.adm .meter { flex: 0 1 6rem; height: 0.45rem; border-radius: 999px; background: #e3ece4; overflow: hidden; }
+.adm.dark .meter { background: #1f2b22; }
+.adm .meter .fill { display: block; height: 100%; background: #22c55e; border-radius: 999px; transition: width 0.4s; }
+.adm .meter .fill.warn { background: #f59e0b; }
+.adm .meter .fill.crit { background: #dc2626; }
 .adm .pill { display: inline-block; border: 1px solid #d5e2d7; border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; margin: 0.1rem 0.15rem 0.1rem 0; }
 .adm.dark .pill { border-color: #2a3b2f; }
 .adm .pill.first { border-color: #12813c; color: #12813c; font-weight: 700; }

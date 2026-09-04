@@ -74,6 +74,44 @@ def _get(url: str, params: dict) -> dict:
         return json.loads(r.read().decode())
 
 
+def _get_redis():
+    try:
+        from cache import _redis
+        return _redis()
+    except Exception:
+        return None
+
+
+def _serpapi_quota() -> int:
+    return int(os.getenv("SERPAPI_QUOTA", "250") or 250)
+
+
+def _serpapi_bump(r, index: int):
+    """Count this month's requests per key index (best-effort, Redis only)."""
+    if r is None:
+        return
+    try:
+        import time
+        ym = time.strftime("%Y%m", time.gmtime())
+        k = f"pm:v2:serpq:{index}:{ym}"
+        n = r.incr(k)
+        if n == 1:
+            r.expire(k, 3360 * 3600)  # ~35d, spans the month safely
+    except Exception:
+        pass
+
+
+def _serpapi_used(r, index: int) -> int:
+    if r is None:
+        return 0
+    try:
+        import time
+        ym = time.strftime("%Y%m", time.gmtime())
+        return int(r.get(f"pm:v2:serpq:{index}:{ym}") or 0)
+    except Exception:
+        return 0
+
+
 def _price_to_cents(price) -> int | None:
     if price is None:
         return None
@@ -137,36 +175,63 @@ def rainforest_search(query: str, marketplace: str, page: int = 1):
     return out
 
 
+def _serpapi_keys() -> list:
+    """SERPAPI_API_KEYS (comma list) wins; SERPAPI_API_KEY stays first for compat."""
+    keys = [k.strip() for k in os.getenv("SERPAPI_API_KEYS", "").split(",") if k.strip()]
+    legacy = os.getenv("SERPAPI_API_KEY", "").strip()
+    if legacy and legacy not in keys:
+        keys.insert(0, legacy)
+    return keys
+
+
 def serpapi_search(query: str, marketplace: str, page: int = 1):
-    """SerpApi amazon engine (250 free searches/mo). organic_results -> rows."""
-    key = os.getenv("SERPAPI_API_KEY", "")
-    if not key:
+    """SerpApi amazon engine (250 free searches/mo per key).
+
+    Tries every configured key in order (SERPAPI_API_KEYS, comma-separated,
+    SERPAPI_API_KEY kept as first entry for backwards compat) so a monthly
+    quota can never take the provider down — and emits an alert when a key
+    fails or nears its limit.
+    """
+    from alerts import serpapi_key_failed, serpapi_usage_check  # local: no cycles
+    keys = _serpapi_keys()
+    if not keys:
         raise RuntimeError("SERPAPI_API_KEY not set")
     a = amz(marketplace)
     domain = a["domain"]
-    data = _get("https://serpapi.com/search.json", {
-        "api_key": key, "engine": "amazon", "k": query,
-        "amazon_domain": domain, "language": a["lang"],
-        "delivery_zip": a["zip"], "shipping_location": a["cc"],
-        "page": str(max(1, int(page))),
-    })
-    if data.get("error"):
-        raise RuntimeError(f"serpapi: {data['error']}")
-    out = []
-    for p in data.get("organic_results", []):
-        asin = p.get("asin", "")
-        price = p.get("price")
-        if isinstance(price, dict):
-            price = price.get("extracted") or price.get("value") or price.get("raw")
-        price_cents = _price_to_cents(price)
-        if not asin or price_cents is None:
+    r = _get_redis()
+    last_err = "no keys"
+    for i, key in enumerate(keys):
+        _serpapi_bump(r, i)
+        try:
+            data = _get("https://serpapi.com/search.json", {
+                "api_key": key, "engine": "amazon", "k": query,
+                "amazon_domain": domain, "language": a["lang"],
+                "delivery_zip": a["zip"], "shipping_location": a["cc"],
+                "page": str(max(1, int(page))),
+            })
+            if data.get("error"):
+                raise RuntimeError(f"serpapi: {data['error']}")
+            out = []
+            for p in data.get("organic_results", []):
+                asin = p.get("asin", "")
+                price = p.get("price")
+                if isinstance(price, dict):
+                    price = price.get("extracted") or price.get("value") or price.get("raw")
+                price_cents = _price_to_cents(price)
+                if not asin or price_cents is None:
+                    continue
+                out.append((asin, p.get("title", ""), price_cents,
+                            p.get("link", "") or f"https://{domain}/dp/{asin}",
+                            "Amazon", p.get("thumbnail") or p.get("image")))
+            if not out:
+                raise RuntimeError("serpapi returned 0 priced products.")
+            serpapi_usage_check(i, _serpapi_used(r, i), _serpapi_quota())
+            return out
+        except Exception as e:
+            last_err = str(e)
+            serpapi_key_failed(i, last_err)
             continue
-        out.append((asin, p.get("title", ""), price_cents,
-                    p.get("link", "") or f"https://{domain}/dp/{asin}",
-                    "Amazon", p.get("thumbnail") or p.get("image")))
-    if not out:
-        raise RuntimeError("serpapi returned 0 priced products.")
-    return out
+    raise RuntimeError(last_err)
 
 
 def serpapi_product(asin: str, domain: str = "amazon.de"):
