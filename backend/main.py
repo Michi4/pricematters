@@ -672,7 +672,9 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             text = query
             if src != dst:
                 from translate import translate
-                text = translate(query, src, dst).rstrip(' ?.!').strip() or query
+                # two-sided punctuation strip: MT results sometimes carry
+                # leading/trailing junk ("- Olivenöl") that must not render
+                text = translate(query, src, dst).strip(' -–—.;:!?()"\'') or query
             k = text.lower()
             if k not in seen:
                 seen.add(k)

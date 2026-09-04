@@ -168,8 +168,12 @@ def translate(query: str, src: str = "de", dst: str = "en") -> str:
             with urllib.request.urlopen(req, timeout=3) as r:
                 data = json.loads(r.read().decode())
             t = (data.get("responseData") or {}).get("translatedText", "").strip()
-            # MyMemory returns the query uppercased / with warnings on rate limit — ignore those
-            if t and t.lower() != query.lower() and "QUERY LENGTH LIMIT" not in t:
+            # MyMemory returns the query uppercased / with warnings on rate limit — ignore those.
+            # Also reject junk like "- Olivenöl": MyMemory sometimes prefixes
+            # translations with dashes (observed en->de on a German word) —
+            # a real translation never starts with punctuation.
+            if (t and t.lower() != query.lower() and "QUERY LENGTH LIMIT" not in t
+                    and t[0].isalnum()):
                 out = t
         except Exception:
             pass
