@@ -115,10 +115,43 @@ def glossary_lookup(query: str, src: str, dst: str) -> str | None:
     return out if out != low else None
 
 
+def _redis_hget(key: str) -> str | None:
+    """Translations never change: persist across restarts (30d) so repeat
+    queries skip the network entirely. Fail-open, like everything here."""
+    try:
+        import os
+        import redis
+        url = os.getenv("REDIS_URL", "")
+        if not url:
+            return None
+        return redis.Redis.from_url(url, socket_timeout=2).hget("pm:i18n", key)
+    except Exception:
+        return None
+
+
+def _redis_hset(key: str, val: str):
+    try:
+        import os
+        import redis
+        url = os.getenv("REDIS_URL", "")
+        if not url:
+            return
+        r = redis.Redis.from_url(url, socket_timeout=2)
+        r.hset("pm:i18n", key, val)
+        r.expire("pm:i18n", 30 * 86400)
+    except Exception:
+        pass
+
+
 def translate(query: str, src: str = "de", dst: str = "en") -> str:
     key = f"{src}|{dst}|{query.lower()}"
     if key in _cache:
         return _cache[key]
+    hit = _redis_hget(key)
+    if hit is not None:
+        out = hit.decode() if isinstance(hit, bytes) else hit
+        _cache[key] = out
+        return out
     out = query
     hit = glossary_lookup(query, src, dst)
     if hit:
@@ -130,7 +163,9 @@ def translate(query: str, src: str = "de", dst: str = "en") -> str:
                 "https://api.mymemory.translated.net/get?" + params,
                 headers={"User-Agent": "pricematters/0.1"},
             )
-            with urllib.request.urlopen(req, timeout=8) as r:
+            # 3s cap: MyMemory answers in <1s when healthy; an outage must not
+            # stall a fresh search for 8s (glossary + original query cover it)
+            with urllib.request.urlopen(req, timeout=3) as r:
                 data = json.loads(r.read().decode())
             t = (data.get("responseData") or {}).get("translatedText", "").strip()
             # MyMemory returns the query uppercased / with warnings on rate limit — ignore those
@@ -139,6 +174,7 @@ def translate(query: str, src: str = "de", dst: str = "en") -> str:
         except Exception:
             pass
     _cache[key] = out
+    _redis_hset(key, out)
     return out
 
 

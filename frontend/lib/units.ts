@@ -173,20 +173,31 @@ export function unitPrice(priceCents: number, qty: ExtractedQty): { per: number;
   return { per: (priceCents / qty.value) * c.mult, base: c.base };
 }
 
-// Display targets for the UI unit selector (€/kg vs €/100g vs €/l …)
+// Display targets for the UI unit selector (€/kg vs €/100g vs €/GB …).
+// `label` is what the user sees (proper capitals: GB/TB/MB); `id` is the key.
 export const DISPLAY_TARGETS = [
-  { id: 'kg', bases: ['kg'] },
-  { id: '100g', bases: ['kg'] },
-  { id: 'l', bases: ['l'] },
-  { id: '100ml', bases: ['l'] },
-  { id: 'pcs', bases: ['pcs'] },
-  { id: 'gb', bases: ['gb', 'tb', 'mb'] },
+  { id: 'kg', label: 'kg', bases: ['kg'] },
+  { id: '100g', label: '100 g', bases: ['kg'] },
+  { id: 'g', label: 'g', bases: ['kg'] },
+  { id: 'l', label: 'l', bases: ['l'] },
+  { id: '100ml', label: '100 ml', bases: ['l'] },
+  { id: 'ml', label: 'ml', bases: ['l'] },
+  { id: 'pcs', label: 'pcs', bases: ['pcs'] },
+  { id: 'gb', label: 'GB', bases: ['gb', 'tb', 'mb'] },
+  { id: 'tb', label: 'TB', bases: ['gb', 'tb', 'mb'] },
+  { id: 'mb', label: 'MB', bases: ['gb', 'tb', 'mb'] },
 ] as const;
+
+export function targetLabel(id: string): string {
+  return DISPLAY_TARGETS.find((t) => t.id === id)?.label || id;
+}
 
 export function convertPer(per: number, base: string, target: string): number | null {
   if (target === base) return per;
   if (base === 'kg' && target === '100g') return per / 10;
+  if (base === 'kg' && target === 'g') return per / 1000;
   if (base === 'l' && target === '100ml') return per / 10;
+  if (base === 'l' && target === 'ml') return per / 1000;
   if (base === 'gb' && target === 'tb') return per * 1000;
   if (base === 'gb' && target === 'mb') return per / 1000;
   return null;

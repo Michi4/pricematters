@@ -22,7 +22,7 @@
     "perPage": "pro Seite",
     "alsoSearched": "Auch gesucht:",
     "demo": "Demo-Daten – echte Live-Preise kommen, sobald ein Daten-Key hinterlegt ist.",
-    "empty": "Nichts gefunden. Versuch es mit einem anderen Begriff – z. B. auf Englisch.",
+    "empty": "Nichts gefunden. Versuch es mit einem anderen Begriff.",
     "rateLimited": "Du suchst gerade etwas zu schnell – kurze Pause, dann geht's weiter. Versuch es in {s} Sekunden wieder.",
     "best": "Bester Deal",
     "per": "pro",
@@ -47,7 +47,7 @@
     "filter": {
       "min": "Min-Preis",
       "max": "Max-Preis",
-      "kind": "Art",
+      "kind": "Nur",
       "onlyUnit": "Nur mit Grundpreis",
       "kinds": {
         "all": "Alles",
@@ -60,7 +60,11 @@
     "store": {
       "all": "Alle",
       "label": "Shops"
-    }
+    },
+    "emptyFiltered": "Keine Treffer mit diesen Filtern.",
+    "resetFilters": "Filter zurücksetzen",
+    "viewList": "Listenansicht",
+    "viewGrid": "Rasteransicht"
   },
   "faves": {
     "title": "Meine Favoriten",

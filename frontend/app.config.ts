@@ -5,7 +5,7 @@ export default defineAppConfig({
     'pricematters.app': {
       name: 'PriceMatters',
       slogansEN: [
-        'Because unlike size, pricematters.',
+        'Because unlike size, PriceMatters.',
         "Don't guess. Know the price per kilo.",
         'Amazon shows the price. We show the truth.',
         'Small pack, big scam — check the unit price.',
@@ -54,7 +54,7 @@ export default defineAppConfig({
     default: {
       name: 'PriceMatters',
       slogansEN: [
-        'Because unlike size, pricematters.',
+        'Because unlike size, PriceMatters.',
         "Don't guess. Know the price per kilo.",
         'Amazon shows the price. We show the truth.',
         'Same Amazon. Same product. Lower price per kilo.',

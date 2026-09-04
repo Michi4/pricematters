@@ -55,7 +55,7 @@
             </ul>
           </div>
           <button type="submit" :disabled="pending" :aria-busy="pending">
-            <svg v-if="pending" class="spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <svg class="spin" :style="{ visibility: pending ? 'visible' : 'hidden' }" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,0.35)" stroke-width="3"/>
               <path d="M21 12a9 9 0 0 0-9-9" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
             </svg>
@@ -104,9 +104,8 @@
         </div>
       </section>
 
-      <section v-if="searched" class="results" aria-live="polite">
+      <section v-if="searched" :class="['results', viewMode]" aria-live="polite">
         <div class="meta-row">
-          <span>{{ t('results.count', { n: sorted.length }) }}</span>
           <span v-if="meta.demo" class="demo">{{ t('results.demo') }}</span>
           <span v-if="meta.queries?.length > 1" class="also">
             {{ t('results.alsoSearched') }} {{ meta.queries.slice(1).join(', ') }}
@@ -118,55 +117,71 @@
           </span>
         </div>
 
-        <div v-if="sorted.length" class="controls">
-          <div class="segmented" role="tablist" :aria-label="t('results.sort.label')">
+        <div v-if="sorted.length" class="toolbar">
+          <div class="segmented" role="group" :aria-label="t('results.sort.label')">
             <button :class="{ active: sortKey === 'unit' }" @click="sortKey = 'unit'">{{ t('results.sort.shortUnit') }}</button>
             <button :class="{ active: sortKey === 'priceAsc' }" @click="sortKey = 'priceAsc'">{{ t('results.sort.shortAsc') }}</button>
             <button :class="{ active: sortKey === 'priceDesc' }" @click="sortKey = 'priceDesc'">{{ t('results.sort.shortDesc') }}</button>
           </div>
+          <div class="segmented view" role="group">
+            <button :class="{ active: viewMode === 'list' }" :aria-label="t('results.viewList')" :title="t('results.viewList')" @click="viewMode = 'list'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <button :class="{ active: viewMode === 'grid' }" :aria-label="t('results.viewGrid')" :title="t('results.viewGrid')" @click="viewMode = 'grid'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+            </button>
+          </div>
         </div>
 
-        <details v-if="sorted.length" class="filters-wrap">
-          <summary>{{ t('results.filterTitle') }}</summary>
-          <div class="controls">
-          <label>{{ t('results.unit.label') }}
-            <select v-model="displayUnit">
-              <option v-for="u in unitOptions" :key="u" :value="u">{{ sym }} / {{ u }}</option>
-            </select>
-          </label>
-          <div v-if="stores.length > 1" class="stores">
-            <span>{{ t('results.store.label') }}:</span>
-            <button :class="{ active: storeFilter === 'all' }" @click="storeFilter = 'all'">{{ t('results.store.all') }}</button>
-            <button
-              v-for="s in stores" :key="s"
-              :class="{ active: storeFilter === s }" @click="storeFilter = s"
-            >{{ s }}</button>
+        <details v-if="sorted.length || filtersActive" class="filters">
+          <summary>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"/></svg>
+            {{ t('results.filterTitle') }}
+            <span v-if="filtersActive" class="fdot" aria-hidden="true"></span>
+          </summary>
+          <div class="fgrid">
+            <div class="fsec">
+              <span class="flabel">{{ t('results.unit.label') }}</span>
+              <div class="pills">
+                <button v-for="u in unitOptions" :key="u" :class="{ active: displayUnit === u }" @click="displayUnit = u">{{ sym }} / {{ targetLabel(u) }}</button>
+              </div>
+            </div>
+            <div v-if="stores.length > 1" class="fsec">
+              <span class="flabel">{{ t('results.store.label') }}</span>
+              <div class="pills">
+                <button :class="{ active: storeFilter === 'all' }" @click="storeFilter = 'all'">{{ t('results.store.all') }}</button>
+                <button v-for="s in stores" :key="s" :class="{ active: storeFilter === s }" @click="storeFilter = s">{{ s }}</button>
+              </div>
+            </div>
+            <div class="fsec">
+              <span class="flabel">{{ t('results.filter.min') }} / {{ t('results.filter.max') }}</span>
+              <div class="prange">
+                <input v-model="minPrice" type="number" min="0" step="0.01" placeholder="0.00" :aria-label="t('results.filter.min')" />
+                <span aria-hidden="true">–</span>
+                <input v-model="maxPrice" type="number" min="0" step="0.01" placeholder="∞" :aria-label="t('results.filter.max')" />
+              </div>
+            </div>
+            <div class="fsec">
+              <span class="flabel">{{ t('results.filter.kind') }}</span>
+              <div class="pills">
+                <button :class="{ active: kindFilter === 'all' }" @click="kindFilter = 'all'">{{ t('results.filter.kinds.all') }}</button>
+                <button :class="{ active: kindFilter === 'mass' }" @click="kindFilter = 'mass'">{{ t('results.filter.kinds.mass') }}</button>
+                <button :class="{ active: kindFilter === 'volume' }" @click="kindFilter = 'volume'">{{ t('results.filter.kinds.volume') }}</button>
+                <button :class="{ active: kindFilter === 'count' }" @click="kindFilter = 'count'">{{ t('results.filter.kinds.count') }}</button>
+                <button :class="{ active: kindFilter === 'storage' }" @click="kindFilter = 'storage'">{{ t('results.filter.kinds.storage') }}</button>
+              </div>
+            </div>
           </div>
-          <label>{{ t('results.filter.min') }}
-            <input v-model="minPrice" type="number" min="0" step="0.01" placeholder="0.00" />
-          </label>
-          <label>{{ t('results.filter.max') }}
-            <input v-model="maxPrice" type="number" min="0" step="0.01" placeholder="∞" />
-          </label>
-          <label>{{ t('results.filter.kind') }}
-            <select v-model="kindFilter">
-              <option value="all">{{ t('results.filter.kinds.all') }}</option>
-              <option value="mass">{{ t('results.filter.kinds.mass') }}</option>
-              <option value="volume">{{ t('results.filter.kinds.volume') }}</option>
-              <option value="count">{{ t('results.filter.kinds.count') }}</option>
-              <option value="storage">{{ t('results.filter.kinds.storage') }}</option>
-            </select>
-          </label>
-          <label class="check">
-            <input v-model="onlyUnit" type="checkbox" />
-            {{ t('results.filter.onlyUnit') }}
-          </label>
-          </div>
+          <button v-if="filtersActive" class="linklike freset" @click="resetFilters">{{ t('results.resetFilters') }}</button>
         </details>
 
         <p v-if="searchError" class="error banner">{{ t('results.rateLimited', { s: searchRetry }) }}</p>
 
-        <p v-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
+        <p v-if="results.length && !sorted.length && !pending" class="empty">
+          {{ t('results.emptyFiltered') }}
+          <button class="linklike" @click="resetFilters">{{ t('results.resetFilters') }}</button>
+        </p>
+        <p v-else-if="!sorted.length && !pending" class="empty">{{ t('results.empty') }}</p>
 
         <template v-for="(r, i) in paged" :key="r.asin">
         <article class="card" :class="{ best: i === 0 && page === 1 && sortKey === 'unit' && shownUnit(r) }">
@@ -263,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { convertPer, DISPLAY_TARGETS, extractQuantity, unitPrice } from '../lib/units';
+import { convertPer, DISPLAY_TARGETS, extractQuantity, targetLabel, unitPrice } from '../lib/units';
 
 const appConfig = useAppConfig() as any;
 const config = useRuntimeConfig();
@@ -461,9 +476,17 @@ const storeFilter = ref('all');
 const minPrice = ref('');
 const maxPrice = ref('');
 const kindFilter = ref('all');
-const onlyUnit = ref(true);
 const page = ref(1);
-const perPage = ref(25);
+// perPage + view survive reloads (localStorage, guarded for SSR)
+const perPage = ref(10);
+const viewMode = ref<'list' | 'grid'>('list');
+try {
+  const pp = parseInt(localStorage.getItem('pm_perpage') || '', 10);
+  if ([10, 25, 50, 100].includes(pp)) perPage.value = pp;
+  if (localStorage.getItem('pm_view') === 'grid') viewMode.value = 'grid';
+} catch { /* SSR / private mode */ }
+watch(perPage, (v) => { try { localStorage.setItem('pm_perpage', String(v)); } catch { /* ignore */ } });
+watch(viewMode, (v) => { try { localStorage.setItem('pm_view', v); } catch { /* ignore */ } });
 const userTz = ref('');
 const shipHint = computed(() => {
   if (['de', 'at', 'ch'].includes(marketplace.value)) return false;
@@ -588,7 +611,6 @@ async function search() {
     minPrice.value = '';
     maxPrice.value = '';
     kindFilter.value = 'all';
-    onlyUnit.value = true;
     page.value = 1;
     trackEvent('search', {
       query: q.value, marketplace: marketplace.value,
@@ -631,7 +653,6 @@ const sorted = computed(() => {
   const max = parseFloat(maxPrice.value) * 100;
   const arr = results.value.filter((r: any) => {
     if (storeFilter.value !== 'all' && (r.store || 'Amazon') !== storeFilter.value) return false;
-    if (onlyUnit.value && !r.unitPrice) return false;
     if (kindFilter.value !== 'all' && r.qty?.kind !== kindFilter.value) return false;
     if (!isNaN(min) && minPrice.value !== '' && r.priceCents < min) return false;
     if (!isNaN(max) && maxPrice.value !== '' && r.priceCents > max) return false;
@@ -647,7 +668,18 @@ const sorted = computed(() => {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / perPage.value)));
 const paged = computed(() => sorted.value.slice((page.value - 1) * perPage.value, page.value * perPage.value));
-watch([sortKey, storeFilter, kindFilter, minPrice, maxPrice, onlyUnit, displayUnit, perPage], () => { page.value = 1; });
+watch([sortKey, storeFilter, kindFilter, minPrice, maxPrice, displayUnit, perPage], () => { page.value = 1; });
+
+// "no match" empty state offers a one-click way out of over-strict filters
+function resetFilters() {
+  storeFilter.value = 'all';
+  minPrice.value = '';
+  maxPrice.value = '';
+  kindFilter.value = 'all';
+  page.value = 1;
+}
+const filtersActive = computed(() =>
+  storeFilter.value !== 'all' || minPrice.value !== '' || maxPrice.value !== '' || kindFilter.value !== 'all');
 
 // ---- SEO (SSR, per brand + locale) ----
 const url = useRequestURL();
@@ -699,7 +731,13 @@ useHead({
 [data-theme="dark"] .store { background: #223028; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-html { scrollbar-gutter: stable; }
+html { scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #9db8a5 transparent; }
+html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #b9cdc0; border-radius: 8px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--green); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #31402f; border-color: #0d140f; }
 :focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -727,7 +765,7 @@ html { scrollbar-gutter: stable; }
 .ad a { color: var(--green-d); font-weight: 700; }
 .ad.infeed { margin-bottom: 0.8rem; }
 .linklike { background: none; border: none; padding: 0; color: var(--green-d); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+.modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
 .modal { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 1.6rem; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; }
 .modal h2 { margin-top: 0; text-align: center; }
 .modal > p { text-align: center; }
@@ -771,7 +809,7 @@ html { scrollbar-gutter: stable; }
 .market-list li[role="option"] strong { font-weight: 800; letter-spacing: 0.04em; }
 .market-list li[role="option"] span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .market-list li[role="option"] em { font-style: normal; color: var(--mut); font-size: 0.8rem; }
-.search > button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem 2rem; margin-left: 0.35rem; font-size: 1.1rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 13px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.search > button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem 2rem; margin-left: 0.35rem; min-width: 12rem; font-size: 1.1rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 13px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
 .search > button:hover:not(:disabled) { background: var(--green-d); }
 .search > button:disabled { opacity: 0.75; cursor: wait; }
 .spin { width: 1.1rem; height: 1.1rem; animation: rot 0.7s linear infinite; }
@@ -788,21 +826,27 @@ html { scrollbar-gutter: stable; }
 .popular button:hover { border-color: var(--green); }
 .meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; min-height: 1.8em; }
 .demo { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; }
-.controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; background: var(--card); padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid var(--line); margin-bottom: 1rem; font-size: 0.92rem; }
-.controls label { display: flex; gap: 0.4rem; align-items: center; }
-.controls select { padding: 0.4rem 0.5rem; border-radius: 8px; }
-.controls input[type="number"] { width: 6rem; padding: 0.4rem 0.5rem; border: 2px solid var(--input-line); border-radius: 8px; background: var(--card); color: var(--ink); }
-.controls .check { display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
-.filters-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 1rem; font-size: 0.92rem; }
-.filters-wrap summary { cursor: pointer; padding: 0.7rem 1rem; font-weight: 700; color: var(--mut); list-style-position: inside; }
-.filters-wrap .controls { border: none; margin-bottom: 0; }
-.card-main { display: flex; gap: 1rem; align-items: flex-start; }
-.thumb { width: 84px; height: 84px; min-width: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+.toolbar { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.filters { background: var(--card); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 1rem; font-size: 0.92rem; }
+.filters summary { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem 1.1rem; font-weight: 700; color: var(--mut); list-style-position: inside; }
+.filters summary svg { width: 1.05rem; height: 1.05rem; }
+.filters summary::-webkit-details-marker { display: none; }
+.fdot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--green); }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.4rem; padding: 0.2rem 1.1rem 1rem; }
+.fsec { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.flabel { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mut); }
+.pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.pills button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 20px; padding: 0.35rem 0.9rem; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+.pills button:hover { border-color: var(--green); }
+.pills button.active { background: var(--green); border-color: var(--green); color: #fff; }
+.prange { display: flex; align-items: center; gap: 0.5rem; color: var(--mut); }
+.prange input { width: 100%; min-width: 0; padding: 0.45rem 0.6rem; border: 2px solid var(--input-line); border-radius: 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.9rem; }
+.freset { margin: 0 1.1rem 1rem; }
+.card-main { display: flex; gap: 1rem; align-items: center; }
+.thumb { width: 84px; height: 84px; min-width: 84px; flex: none; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
 .card:not(.skel) .thumb { content-visibility: auto; }
 .thumb.placeholder { display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .card-body { flex: 1; min-width: 0; }
-.stores button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 20px; padding: 0.25rem 0.8rem; margin: 0.1rem; cursor: pointer; }
-.stores button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 .pager { display: flex; gap: 0.8rem; align-items: center; justify-content: center; margin: 1.2rem 0; color: var(--mut); font-size: 0.92rem; }
 .pager button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 9px; padding: 0.35rem 0.9rem; font-size: 1rem; cursor: pointer; }
 .pager button:disabled { opacity: 0.35; cursor: default; }
@@ -814,6 +858,22 @@ html { scrollbar-gutter: stable; }
 .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
 .segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
 .segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.segmented.view button { padding: 0.45rem 0.7rem; display: inline-flex; }
+.segmented.view svg { width: 1.05rem; height: 1.05rem; }
+@media (max-width: 639px) { .segmented.view { display: none; } }
+/* grid view (desktop only): compact vertical cards */
+.results.grid .meta-row, .results.grid .toolbar, .results.grid .filters,
+.results.grid .banner, .results.grid .empty, .results.grid .pager,
+.results.grid .ad.infeed { grid-column: 1 / -1; }
+@media (min-width: 640px) {
+  .results.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.9rem; align-items: stretch; }
+  .results.grid .card { margin-bottom: 0; display: flex; flex-direction: column; }
+  .results.grid .card-main { flex-direction: column; align-items: stretch; flex: 1; }
+  .results.grid .thumb { width: 100%; height: 130px; }
+  .results.grid .card h2 { font-size: 0.95rem; }
+  .results.grid .numbers { flex-direction: column; align-items: flex-start; gap: 0.3rem; flex: 1; }
+  .results.grid .numbers .cta-inline { margin-left: 0; margin-top: auto; padding-top: 0.65rem; width: 100%; text-align: center; justify-content: center; }
+}
 .empty { text-align: center; color: var(--mut); padding: 2rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; margin-bottom: 0.8rem; }
 .card.best { border: 2px solid var(--green); }
@@ -821,13 +881,13 @@ html { scrollbar-gutter: stable; }
    hit-area stretches over the card (valid HTML, keyboard + SR friendly) */
 .card:not(.skel) { position: relative; transition: border-color 0.15s, box-shadow 0.15s; }
 .card:not(.skel):hover { border-color: var(--green); box-shadow: 0 6px 22px rgba(18, 129, 60, 0.13); }
-.card:not(.skel) .cta::after { content: ""; position: absolute; inset: 0; border-radius: 14px; }
-.card-top { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; }
+.card:not(.skel) .cta::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: 14px; }
+.card-top { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; min-height: 1.5rem; }
 .best-badge { background: var(--green); color: #fff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 20px; text-transform: uppercase; }
 .store { background: #eef4ee; color: var(--mut); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; }
-.card h2 { margin: 0.2rem 0 0.6rem; font-size: 1.05rem; font-weight: 600; }
-.numbers { display: flex; gap: 0.9rem 1.2rem; align-items: center; flex-wrap: wrap; }
-.numbers .cta-inline { margin-left: auto; padding: 0.5rem 1.1rem; font-size: 0.92rem; white-space: nowrap; }
+.card h2 { margin: 0 0 0.55rem; font-size: 1.05rem; font-weight: 600; line-height: 1.35; }
+.numbers { display: flex; gap: 0.5rem 1.2rem; align-items: center; flex-wrap: wrap; }
+.numbers .cta-inline { margin-left: auto; padding: 0.5rem 1.1rem; min-height: 2.75rem; display: inline-flex; align-items: center; font-size: 0.92rem; white-space: nowrap; }
 @media (max-width: 520px) {
   .numbers .cta-inline { margin-left: 0; flex: 1 1 100%; text-align: center; padding: 0.65rem; }
 }

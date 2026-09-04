@@ -22,7 +22,7 @@
     "perPage": "per page",
     "alsoSearched": "Also searched:",
     "demo": "Demo data – live prices kick in once a data key is configured.",
-    "empty": "Nothing found. Try another term – e.g. in German.",
+    "empty": "Nothing found. Try another term.",
     "rateLimited": "You're searching a bit too fast – take a short break. Try again in {s} seconds.",
     "best": "Best deal",
     "per": "per",
@@ -47,7 +47,7 @@
     "filter": {
       "min": "Min price",
       "max": "Max price",
-      "kind": "Type",
+      "kind": "Only",
       "onlyUnit": "Only with unit price",
       "kinds": {
         "all": "All",
@@ -60,7 +60,11 @@
     "store": {
       "all": "All",
       "label": "Shops"
-    }
+    },
+    "emptyFiltered": "No matches with these filters.",
+    "resetFilters": "Reset filters",
+    "viewList": "List view",
+    "viewGrid": "Grid view"
   },
   "faves": {
     "title": "My Favorites",

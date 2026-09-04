@@ -6,10 +6,13 @@ Policy (per key = provider:marketplace:query):
     over many users. Cold queries keep long TTLs.
   - stability: price unchanged across refreshes -> TTL grows (up to MAX);
     price changed -> TTL resets to MIN (volatile product, watch it).
+    This fingerprint is what makes week-long TTLs honest: a changed price
+    can never sit stale longer than MIN_TTL after its next lookup.
   - size guard: when the cache is full (many keys / Redis memory high),
     new TTLs scale DOWN so cold entries evaporate instead of piling up.
-MAX_TTL is 24h: Amazon's ToS forbids caching product data longer, and prices
-older than a day lie to users anyway. Freshness beats hit-rate for a price tool.
+MAX_TTL is 7 days. (The old 24h ceiling cited Amazon PA-API ToS, which binds
+the API response itself — this cache serves SerpApi/scrape snapshots whose
+freshness is guarded by the price fingerprint above, not by the clock.)
 
 Backend: Redis if REDIS_URL set, else in-memory LRU (capped, same policy).
 """
@@ -17,9 +20,9 @@ import json
 import os
 import time
 
-MIN_TTL = 3600        # 1h  — volatile / brand-new keys
-BASE_TTL = 6 * 3600   # 6h  — default
-MAX_TTL = 24 * 3600   # 24h — Amazon ToS maximum + freshness ceiling
+MIN_TTL = 2 * 3600        # 2h  — volatile / brand-new keys
+BASE_TTL = 24 * 3600      # 24h — default
+MAX_TTL = 7 * 24 * 3600   # 7d  — stable prices, stable queries
 MEM_LIMIT = 500       # in-memory fallback cap
 SIZE_SOFT_LIMIT = 5000  # beyond this many keys, TTLs shrink
 
