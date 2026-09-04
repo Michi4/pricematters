@@ -633,8 +633,8 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             if all_mk:
                 cur.execute(
                     """SELECT q, c, mps FROM (
-                         SELECT btrim(lower(query), ' -.,!?;:()"''') AS lq,
-                                mode() WITHIN GROUP (ORDER BY query) AS q,
+                         SELECT btrim(lower(query), ' -.,!?;:()"''–—−') AS lq,
+                                btrim(mode() WITHIN GROUP (ORDER BY query), ' -.,!?;:()"''–—−') AS q,
                                 COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
                          FROM searches
                          WHERE created_at > now() - interval '30 days' AND query <> ''
@@ -648,8 +648,8 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
             else:
                 cur.execute(
                     """SELECT q, c, mps FROM (
-                         SELECT btrim(lower(query), ' -.,!?;:()"''') AS lq,
-                                mode() WITHIN GROUP (ORDER BY query) AS q,
+                         SELECT btrim(lower(query), ' -.,!?;:()"''–—−') AS lq,
+                                btrim(mode() WITHIN GROUP (ORDER BY query), ' -.,!?;:()"''–—−') AS q,
                                 COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
                          FROM searches
                          WHERE marketplace = %s AND created_at > now() - interval '30 days'
