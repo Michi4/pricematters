@@ -56,7 +56,7 @@ def db():
     url = os.getenv("DATABASE_URL", "")
     if not url:
         raise RuntimeError("DATABASE_URL not set — feed import needs Postgres (see .env.example)")
-    return psycopg.connect(url)
+    return psycopg.connect(url, connect_timeout=3)
 
 
 def column_map():

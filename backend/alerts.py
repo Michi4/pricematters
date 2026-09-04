@@ -16,6 +16,16 @@ import time
 
 PFX = "pm:v2"  # namespace only; independent of main.CACHE_VERSION on purpose
 
+import re
+
+_SECRET_RE = re.compile(r"(api_key|apikey|key|token|password|secret)=([^&\s\"\']+)", re.I)
+
+
+def _scrub(text: str) -> str:
+    """Provider errors embed full request URLs (with api_key=...). Alerts end
+    up on the admin's phone — the secret must not."""
+    return _SECRET_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", str(text))
+
 
 def _redis():
     try:
@@ -28,6 +38,7 @@ def _redis():
 def emit(kind: str, text: str, severity: str = "warn", cooldown_s: int = 21600):
     """Queue an alert, deduped by kind for cooldown_s. Never raises."""
     try:
+        text = _scrub(text)
         r = _redis()
         if r is None:
             return

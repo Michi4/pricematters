@@ -15,13 +15,19 @@ def _salt() -> str:
     # rotates daily: hashes cannot be linked across days
     day = int(time.time() // 86400)
     if not DAILY_SALT or DAILY_SALT[0] != str(day):
+        # a weak/absent TRACK_SALT makes the daily IP hash reproducible by
+        # anyone who guesses the scheme — refuse to hash without a real salt
+        env_salt = os.getenv("TRACK_SALT", "").strip()
+        if not env_salt:
+            return ""
         DAILY_SALT = (str(day), hashlib.sha256(
-            (os.getenv("TRACK_SALT", "pm") + str(day)).encode()).hexdigest()[:16])
+            (env_salt + str(day)).encode()).hexdigest()[:16])
     return DAILY_SALT[1]
 
 
 def ip_hash(ip: str) -> str:
-    return hashlib.sha256((_salt() + ip).encode()).hexdigest()[:16]
+    s = _salt()
+    return hashlib.sha256((s + ip).encode()).hexdigest()[:16] if s else ""
 
 
 DDL = """CREATE TABLE IF NOT EXISTS events (
@@ -54,6 +60,12 @@ def track(payload: dict) -> bool:
             return False
         p = {c: payload.get(c) for c in COLS}
         p = {k: (str(v)[:180] if v is not None else None) for k, v in p.items()}
+        # numeric fields: client-supplied, unbounded ints would bloat events
+        for k in ("result_count", "w", "pos", "price_cents", "ms"):
+            try:
+                p[k] = max(-10**6, min(10**6, int(p[k]))) if p[k] is not None else None
+            except (TypeError, ValueError):
+                p[k] = None
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
             # schema is static — create it once per process, not on every event
             if not _ensured:

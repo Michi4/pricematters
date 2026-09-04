@@ -6,6 +6,7 @@ Feed shops:  Awin & co via nightly CSV import (feeds.py) into Postgres,
              searched locally and merged when stores=all (default).
 Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
+import ipaddress
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -32,16 +33,26 @@ RATE_HOUR = int(os.getenv("RATE_SEARCH_PER_HOUR", "100"))
 
 
 def _client_ip(request: Request) -> str:
-    # Traefik sets X-Real-Ip to the verified client IP; XFF's leftmost entry is
-    # attacker-controlled, so it must never win.
-    real = request.headers.get("x-real-ip", "").strip()
-    if real:
-        return real
-    xff = request.headers.get("x-forwarded-for", "")
-    # rightmost XFF entry = closest trusted proxy hop (added by our own Traefik)
-    if xff:
-        return xff.split(",")[-1].strip()
-    return request.client.host if request.client else "anon"
+    """Socket peer is the truth. Forwarded headers are only trusted when the
+    request actually arrives from a private/loopback peer (i.e. our own
+    Traefik inside the Docker network). A direct peer that spoofs X-Real-Ip
+    would otherwise rotate its rate-limit key at will."""
+    peer = request.client.host if request.client else ""
+    forwarded_ok = False
+    try:
+        if peer:
+            forwarded_ok = ipaddress.ip_address(peer).is_private or peer == "testclient"
+    except ValueError:
+        forwarded_ok = False
+    if forwarded_ok:
+        real = request.headers.get("x-real-ip", "").strip()
+        if real:
+            return real
+        xff = request.headers.get("x-forwarded-for", "")
+        # rightmost XFF entry = closest trusted proxy hop (added by our own Traefik)
+        if xff:
+            return xff.split(",")[-1].strip()
+    return peer or "anon"
 
 
 def _rate_retry_after(request: Request) -> int:
@@ -579,10 +590,23 @@ def _send_inquiry_mail(c: Contact) -> bool:
 
 
 @app.get("/popular")
-def popular(marketplace: str = Query("all"), lang: str = Query("de"), limit: int = Query(4, le=20)):
+def popular(request: Request, marketplace: str = Query("all"), lang: str = Query("de"), limit: int = Query(4, le=20)):
     """Top real user queries, last 30 days. marketplace=all merges every
     marketplace/language; a specific code filters. Translated to the UI language.
     [] -> frontend shows nothing (no placeholders)."""
+    # unthrottled, this endpoint can trigger outbound translation calls per
+    # unique query — small per-IP cap (fail-open like the other limiters)
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            pk = f"{CACHE_VERSION}:rlp:{_client_ip(request)}:{int(time.time()) // 60}"
+            if int(r.incr(pk) or 0) > 30:
+                r.expire(pk, 90)
+                return JSONResponse(status_code=429, content={"error": "rate_limited"})
+            r.expire(pk, 90)
+    except Exception:
+        pass
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -683,9 +707,36 @@ def track_event(t: Track, request: Request):
 def _admin_ok(request: Request) -> bool:
     import hmac
     key = os.getenv("ADMIN_KEY", "")
+    if not key:
+        return False
     # header only: a ?key= URL param would land in Traefik/uvicorn access logs
     supplied = request.headers.get("x-admin-key", "")
-    return bool(key) and hmac.compare_digest(supplied, key)
+    if not supplied or len(supplied) > 256:
+        return False
+    # naive brute-force throttle: 20 bad attempts / 10 min per IP → 15 min lockout
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            ip = _client_ip(request)
+            ak = f"{CACHE_VERSION}:admfail:{ip}"
+            if r.get(ak) and int(r.get(ak) or 0) >= 20:
+                return False
+    except Exception:
+        r = None
+    # bytes compare: str compare_digest raises TypeError on non-ASCII (header é → 500)
+    ok = hmac.compare_digest(supplied.encode("utf-8"), key.encode("utf-8"))
+    if not ok and r is not None:
+        try:
+            p = r.pipeline()
+            p.incr(ak)
+            p.expire(ak, 600)
+            p.execute()
+            if int(r.get(ak) or 0) >= 20:
+                r.expire(ak, 900)
+        except Exception:
+            pass
+    return ok
 
 
 def _serpapi_usage() -> list:
