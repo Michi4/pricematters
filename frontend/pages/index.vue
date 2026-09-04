@@ -2,15 +2,10 @@
   <div class="page">
     <header class="top">
       <NuxtLink :to="localePath('/')" class="logo" @click="goHome">
-        <img src="/logo.svg" alt="logo" width="28" height="28" class="logo-light" />
-        <img src="/logo-dark.svg" alt="logo" width="28" height="28" class="logo-dark" />
+        <img src="/logo.svg" alt="logo" width="28" height="28" />
         <span>{{ brand.name }}</span>
       </NuxtLink>
       <div class="top-right">
-        <button class="theme-btn" @click="toggleTheme" aria-label="Theme">
-          <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19"/></svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8 8 0 1 1 10.5 4a6.5 6.5 0 0 0 9.5 9.5z"/></svg>
-        </button>
         <nav class="lang">
         <NuxtLink
           v-for="l in (locales as any[])"
@@ -239,13 +234,6 @@
       </aside>
     </div>
 
-    <Transition name="fade">
-      <div v-if="showDarkHint" class="dark-hint" role="status">
-        <p>{{ t('theme.darkHint') }}</p>
-        <button class="linklike" @click="dismissDarkHint">{{ t('theme.ok') }}</button>
-      </div>
-    </Transition>
-
     <footer>
       <p class="disclosure">{{ t('footer.disclosure') }} {{ t('footer.star') }}</p>
       <p>{{ t('footer.by') }} <a href="https://websters.at" target="_blank" rel="noopener">websters.at</a> · <button class="linklike" @click="adOpen = true">{{ t('ads.title') }}</button></p>
@@ -304,28 +292,6 @@ const plainSlogan = (s: string) => s.replaceAll('*', '');
 // so it can't flash mid-word; reduced-motion users get instant swaps via CSS) ----
 const sloganIdx = ref(0);
 let sloganTimer: ReturnType<typeof setInterval> | null = null;
-const theme = ref('light');
-const showDarkHint = ref(false);
-function applyTheme(t: string) {
-  theme.value = t;
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem('pm_theme', t); } catch { /* private mode */ }
-}
-function toggleTheme() {
-  const next = theme.value === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  // honest one-time hint: light is the polished default, dark works but isn't perfect
-  if (next === 'dark') {
-    try { showDarkHint.value = !localStorage.getItem('pm_dark_hint'); } catch { showDarkHint.value = true; }
-  } else {
-    showDarkHint.value = false;
-  }
-  trackEvent('theme', { ref: next });
-}
-function dismissDarkHint() {
-  showDarkHint.value = false;
-  try { localStorage.setItem('pm_dark_hint', '1'); } catch { /* private mode */ }
-}
 const { data: favesData } = await useAsyncData('faves', () =>
   $fetch('/api/curated', { query: { marketplace: 'de' } }).catch(() => ({ items: [] })));
 const faves = computed(() => (favesData.value as any)?.items || []);
@@ -366,11 +332,6 @@ async function loadPopular() {
 }
 onMounted(() => {
   sloganTimer = setInterval(() => { sloganIdx.value = (sloganIdx.value + 1) % Math.max(slogans.value.length, 1); }, 4600);
-  try {
-    const saved = localStorage.getItem('pm_theme');
-    // light is the default; respect an explicit user choice only
-    applyTheme(saved === 'dark' ? 'dark' : 'light');
-  } catch { applyTheme('light'); }
   loadPopular();
   marketplace.value = guessMarketplace();
   // SSR faves always render marketplace 'de'; re-fetch for the guessed locale
@@ -768,10 +729,6 @@ useSeoMeta({
 useHead({
   link: [{ rel: 'canonical', href: () => canonical.value }],
   script: [
-    // theme BEFORE first paint: onMounted runs after SSR HTML shows, which
-    // flashes white for dark-mode users. This blocking head script sets the
-    // dataset (+ base colors) before the body renders. No flash, no dependency.
-    { innerHTML: '(function(){try{if(localStorage.getItem("pm_theme")==="dark"){var d=document.documentElement;d.setAttribute("data-theme","dark");d.style.background="#0d140f";d.style.colorScheme="dark";}}catch(e){}})();' },
     {
       type: 'application/ld+json',
       children: () => JSON.stringify({
@@ -791,19 +748,13 @@ useHead({
 
 <style>
 :root { --green: #12813c; --green-d: #0d6a30; --ink: #1a2e1f; --mut: #55655a; --bg: #f6faf7; --card: #fff; --line: #e3ece4; --input-line: #d5e2d7; color-scheme: light; }
-[data-theme="dark"] { --ink: #e9f1ea; --mut: #a9bbad; --bg: #0d140f; --card: #141d17; --line: #26332b; --input-line: #31402f; color-scheme: dark; }
-[data-theme="dark"] .unitprice, [data-theme="dark"] .popular button { color: #4ade80; }
-[data-theme="dark"] .demo { background: #453304; color: #fcd34d; }
-[data-theme="dark"] .store { background: #223028; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 html { scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #9db8a5 transparent; }
-html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #b9cdc0; border-radius: 8px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--green); }
-[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #31402f; border-color: #0d140f; }
 :focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -812,15 +763,8 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .top { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1.4rem; background: var(--card); border-bottom: 1px solid var(--line); }
 .logo { display: flex; gap: 0.5rem; align-items: center; font-weight: 800; font-size: 1.15rem; color: var(--ink); text-decoration: none; }
 .top-right { display: flex; align-items: center; gap: 0.5rem; }
-.theme-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; cursor: pointer; }
-.theme-btn svg { width: 1.1rem; height: 1.1rem; }
-.theme-btn:hover { border-color: var(--green); color: var(--green-d); }
 .lang a { text-decoration: none; color: var(--ink); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
-.logo-light { display: block; }
-.logo-dark { display: none; }
-[data-theme="dark"] .logo-light { display: none; }
-[data-theme="dark"] .logo-dark { display: block; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 50vh; transform: translateY(-50%); align-self: flex-start; display: flex; }
@@ -890,7 +834,6 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .skel .skel-bar { height: 0.9rem; }
 @keyframes shine { to { background-position: -200% 0; } }
 .error.banner { background: #fef3c7; color: #92400e; font-weight: 600; padding: 0.7rem 1rem; border-radius: 12px; text-align: center; }
-[data-theme="dark"] .error.banner { background: #453304; color: #fcd34d; }
 .popular { color: var(--mut); font-size: 0.9rem; }
 .popular button { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
 .popular button:hover { border-color: var(--green); }
@@ -926,7 +869,6 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .pager select { padding: 0.35rem 0.5rem; border-radius: 8px; border: 2px solid var(--input-line); background: var(--card); color: var(--ink); }
 .zone, .also { font-size: 0.85rem; }
 .ship { background: #fef3c7; color: #92400e; padding: 0.3rem 0.7rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
-[data-theme="dark"] .ship { background: #453304; color: #fcd34d; }
 .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
 .segmented button { border: none; background: transparent; color: var(--mut); font: inherit; font-size: 0.9rem; font-weight: 700; padding: 0.45rem 1rem; border-radius: 9px; cursor: pointer; }
 .segmented button.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
@@ -979,9 +921,6 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .steps div, .trust div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
 .steps p, .trust p { color: var(--mut); font-size: 0.92rem; }
 footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid var(--line); background: var(--card); }
-.dark-hint { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 40; background: #0d140f; color: #e9f1ea; border-radius: 12px; padding: 0.8rem 1.1rem; max-width: 430px; width: calc(100% - 2rem); font-size: 0.88rem; box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
-.dark-hint p { margin: 0 0 0.4rem; }
-.dark-hint .linklike { color: inherit; }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
 @media (max-width: 600px) {
   .hero h1 { font-size: 1.9rem; min-height: 3.4em; }
