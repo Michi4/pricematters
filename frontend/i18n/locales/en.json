@@ -1,5 +1,7 @@
 {
-  "header": { "tagline": "The honest price comparison" },
+  "header": {
+    "tagline": "The honest price comparison"
+  },
   "hero": {
     "searchPlaceholder": "Rice, coffee, protein, peanut butter …",
     "searchButton": "Compare",
@@ -10,7 +12,10 @@
   "results": {
     "count": "{n} products",
     "zone": "Prices for {zone}",
-    "groups": { "eu": "Europe", "world": "Worldwide" },
+    "groups": {
+      "eu": "Europe",
+      "world": "Worldwide"
+    },
     "shipNote": "Some items may not ship to your region.",
     "shipSwitch": "Switch to amazon.de",
     "pageOf": "Page {p} of {n}",
@@ -35,16 +40,27 @@
       "shortAsc": "Price ↑",
       "shortDesc": "Price ↓"
     },
-    "unit": { "label": "Show as" },
+    "unit": {
+      "label": "Show as"
+    },
     "filterTitle": "Filters & display",
     "filter": {
       "min": "Min price",
       "max": "Max price",
       "kind": "Type",
       "onlyUnit": "Only with unit price",
-      "kinds": { "all": "All", "mass": "Weight (kg, g)", "volume": "Volume (L, mL)", "count": "Count", "storage": "Storage (GB, TB)" }
+      "kinds": {
+        "all": "All",
+        "mass": "Weight (kg, g)",
+        "volume": "Volume (L, mL)",
+        "count": "Count",
+        "storage": "Storage (GB, TB)"
+      }
     },
-    "store": { "all": "All", "label": "Shops" }
+    "store": {
+      "all": "All",
+      "label": "Shops"
+    }
   },
   "faves": {
     "title": "My Favorites",
@@ -83,7 +99,10 @@
     "email": "Email",
     "message": "Message",
     "slot": "Placement",
-    "slots": { "rail": "Sidebar banner", "infeed": "In-feed" },
+    "slots": {
+      "rail": "Sidebar banner",
+      "infeed": "In-feed"
+    },
     "send": "Send request",
     "sending": "Sending …",
     "error": "Could not send – just email us at werbung@websters.at.",
@@ -91,6 +110,7 @@
   },
   "footer": {
     "by": "A project by",
-    "disclosure": "As an Amazon Associate we earn from qualifying purchases – at no extra cost to you. Prices can change at any time – the price shown on Amazon is always binding. This site uses no tracking cookies, just two technical settings (theme & Amazon country) that stay free of personal data."
+    "disclosure": "As an Amazon Associate we earn from qualifying purchases – at no extra cost to you. Prices can change at any time – the price shown on Amazon is always binding. This site uses no tracking cookies, just two technical settings (theme & Amazon country) that stay free of personal data.",
+    "star": "Links marked * are ad links: we may earn a commission on resulting purchases."
   }
 }

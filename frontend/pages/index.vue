@@ -34,20 +34,18 @@
     <main>
       <section class="hero">
         <p class="eyebrow">{{ brand.name }}</p>
-        <Transition name="fade" mode="out-in">
-          <h1 :key="sloganIdx" v-html="fmtSlogan(slogans[sloganIdx] || '')"></h1>
-        </Transition>
+        <h1 class="typewriter" :aria-label="plainSlogan(slogans[0] || '')"><span aria-hidden="true">{{ typed }}</span><span class="caret" aria-hidden="true"></span></h1>
         <form class="search" role="search" @submit.prevent="search">
           <div class="search-field">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
             <input v-model="q" :placeholder="t('hero.searchPlaceholder')" :aria-label="t('hero.searchPlaceholder')" autofocus @keydown.enter.prevent="search" />
           </div>
-          <select v-model="marketplace" :aria-label="t('hero.marketplace')" :title="t('hero.marketplace')" @change="saveMarket">
+          <select ref="marketSel" v-model="marketplace" :aria-label="t('hero.marketplace')" :title="zoneLabel" @change="saveMarket(); nextTick(compactMarket)" @focus="expandMarket" @blur="compactMarket">
             <optgroup :label="t('results.groups.eu')">
-              <option v-for="m in MARKETS.filter((x) => x.group === 'eu')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
+              <option v-for="m in MARKETS.filter((x) => x.group === 'eu')" :key="m.code" :value="m.code">{{ marketFull(m) }}</option>
             </optgroup>
             <optgroup :label="t('results.groups.world')">
-              <option v-for="m in MARKETS.filter((x) => x.group === 'world')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
+              <option v-for="m in MARKETS.filter((x) => x.group === 'world')" :key="m.code" :value="m.code">{{ marketFull(m) }}</option>
             </optgroup>
           </select>
           <button type="submit" :disabled="pending" :aria-busy="pending">
@@ -82,8 +80,7 @@
             </div>
           </div>
           <div class="card-actions">
-            <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`" @click="trackEvent('click', { asin: f.asin, store: 'Amazon', pos: fi, title: f.title, price_cents: f.price_cents, marketplace: marketplace })">{{ t('results.atAmazon') }}</a>
-            <span class="paid">{{ t('results.paidLink') }}</span>
+            <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}*: ${f.title.slice(0, 80)}`" @click="trackEvent('click', { asin: f.asin, store: 'Amazon', pos: fi, title: f.title, price_cents: f.price_cents, marketplace: marketplace })">{{ t('results.atAmazon') }}<span aria-hidden="true">*</span></a>
           </div>
         </article>
       </section>
@@ -188,10 +185,9 @@
             </div>
           </div>
           <div class="card-actions">
-            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace })">
-              {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
+            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}*: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace })">
+              {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}<span aria-hidden="true">*</span>
             </a>
-            <span class="paid">{{ t('results.paidLink') }}</span>
           </div>
         </article>
         <div v-if="i === 1 && sorted.length > 3" class="ad infeed">
@@ -234,7 +230,7 @@
     </Transition>
 
     <footer>
-      <p class="disclosure">{{ t('footer.disclosure') }}</p>
+      <p class="disclosure">{{ t('footer.disclosure') }} {{ t('footer.star') }}</p>
       <p>{{ t('footer.by') }} <a href="https://websters.at" target="_blank" rel="noopener">websters.at</a> · <button class="linklike" @click="adOpen = true">{{ t('ads.title') }}</button></p>
     </footer>
 
@@ -283,13 +279,53 @@ const brand = computed(() => {
 });
 const slogans = computed<string[]>(() =>
   brand.value[locale.value === 'de' ? 'slogansDE' : 'slogansEN'] || brand.value.slogansEN || []);
-// *word* markers in slogans become underlined emphasis in HTML, plain text in meta tags
-const fmtSlogan = (s: string) => s.replace(/\*([^*]+)\*/g, '<u>$1</u>');
+// plain text for meta tags + typewriter (typing raw HTML would flash broken tags)
 const plainSlogan = (s: string) => s.replaceAll('*', '');
-const sloganIdx = ref(0);
+// ---- typewriter hero: types, holds, deletes, next. Static text when the user
+// prefers reduced motion (CSS also kills the caret blink globally). ----
+const typed = ref('');
+let typeTimers: ReturnType<typeof setTimeout>[] = [];
+function later(fn: () => void, ms: number) {
+  typeTimers.push(setTimeout(fn, ms));
+}
+function stopType() {
+  typeTimers.forEach(clearTimeout);
+  typeTimers = [];
+}
+function runTypewriter() {
+  stopType();
+  const list = slogans.value.map(plainSlogan).filter(Boolean);
+  if (!list.length) { typed.value = ''; return; }
+  let reduce = false;
+  try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* SSR */ }
+  if (reduce) { typed.value = list[0]; return; }
+  let si = 0, ci = 0, deleting = false;
+  const tick = () => {
+    const cur = list[si % list.length];
+    if (!deleting) {
+      ci++;
+      typed.value = cur.slice(0, ci);
+      if (ci >= cur.length) { deleting = true; later(tick, 3400); return; }
+      const ch = cur[ci - 1];
+      later(tick, /[.?!,;:]/.test(ch) ? 280 : ch === ' ' ? 60 : 34 + Math.random() * 48);
+    } else {
+      ci -= 3;
+      if (ci <= 0) {
+        typed.value = '';
+        si = (si + 1) % list.length;
+        deleting = false;
+        later(tick, 420);
+        return;
+      }
+      typed.value = cur.slice(0, ci);
+      later(tick, 14);
+    }
+  };
+  later(tick, 500);
+}
+watch(slogans, () => runTypewriter());
 const theme = ref('light');
 const showDarkHint = ref(false);
-let timer: ReturnType<typeof setInterval> | null = null;
 function applyTheme(t: string) {
   theme.value = t;
   document.documentElement.dataset.theme = t;
@@ -347,7 +383,7 @@ async function loadPopular() {
   } catch { popularApi.value = []; }
 }
 onMounted(() => {
-  timer = setInterval(() => { sloganIdx.value = (sloganIdx.value + 1) % Math.max(slogans.value.length, 1); }, 5000);
+  runTypewriter();
   try {
     const saved = localStorage.getItem('pm_theme');
     // light is the default; respect an explicit user choice only
@@ -357,10 +393,11 @@ onMounted(() => {
   marketplace.value = guessMarketplace();
   // SSR faves always render marketplace 'de'; re-fetch for the guessed locale
   loadFaves();
+  nextTick(compactMarket);
   try { userTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* ignore */ }
   if (route.query.q) { q.value = String(route.query.q); search(); }
 });
-onUnmounted(() => { if (timer) clearInterval(timer); });
+onUnmounted(() => stopType());
 
 const q = ref('');
 const marketplace = ref('de');
@@ -397,6 +434,28 @@ function guessMarketplace(): string {
 function saveMarket() {
   try { document.cookie = `pm_market=${marketplace.value};max-age=31536000;path=/;SameSite=Lax`; } catch { /* ignore */ }
 }
+// compact select: collapsed shows just "AT", dropdown shows "AT – Österreich · amazon.de"
+// (native type-ahead matches from the option start, so typing a code jumps to it)
+const marketSel = ref<HTMLSelectElement | null>(null);
+function marketFull(m: { code: string; cc: string; domain: string }) {
+  return `${m.cc} – ${countryName(m.cc)} · ${m.domain}`;
+}
+function compactMarket() {
+  const sel = marketSel.value;
+  if (!sel) return;
+  for (const o of Array.from(sel.options)) {
+    const m = MARKETS.find((x) => x.code === o.value);
+    if (m && o.selected) o.text = m.cc;
+  }
+}
+function expandMarket() {
+  const sel = marketSel.value;
+  if (!sel) return;
+  for (const o of Array.from(sel.options)) {
+    const m = MARKETS.find((x) => x.code === o.value);
+    if (m) o.text = marketFull(m);
+  }
+}
 const results = ref<any[]>([]);
 const meta = ref<any>({});
 const pending = ref(false);
@@ -430,7 +489,7 @@ const modalEl = ref<HTMLElement | null>(null);
 
 // refresh faves + popular when marketplace changes (registered once, not per search)
 watch(marketplace, () => { loadFaves(); });
-watch(locale, () => { loadPopular(); });
+watch(locale, () => { loadPopular(); nextTick(compactMarket); });
 
 function onModalKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && adOpen.value) adOpen.value = false;
@@ -662,7 +721,6 @@ html { scrollbar-gutter: stable; }
 .logo-dark { display: none; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }
-.hero h1 u { text-decoration: underline; text-decoration-color: var(--green); text-decoration-thickness: 0.09em; text-underline-offset: 0.12em; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 50vh; transform: translateY(-50%); align-self: flex-start; display: flex; }
@@ -691,6 +749,8 @@ html { scrollbar-gutter: stable; }
 .hero { text-align: center; padding: 3rem 0 1.5rem; }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; font-weight: 800; color: var(--green-d); margin: 0 0 0.6rem; }
 .hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; height: 2.5em; display: flex; align-items: center; justify-content: center; }
+.typewriter .caret { display: inline-block; width: 3px; height: 1.05em; margin-left: 3px; vertical-align: -0.14em; border-radius: 2px; background: var(--green); animation: blink 1.05s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 .search { display: flex; align-items: stretch; gap: 0; max-width: 720px; margin: 0 auto; background: var(--card); border: 2px solid var(--input-line); border-radius: 18px; padding: 0.35rem; box-shadow: 0 10px 32px rgba(18, 129, 60, 0.10); transition: border-color 0.15s, box-shadow 0.15s; }
@@ -700,7 +760,7 @@ html { scrollbar-gutter: stable; }
 .search-field input { flex: 1; min-width: 0; border: none; background: transparent; padding: 1.05rem 0.2rem; font-size: 1.2rem; color: var(--ink); }
 .search-field input::placeholder { color: var(--mut); opacity: 0.75; }
 .search-field input:focus { outline: none; }
-.search > select { flex: 0 1 12rem; min-width: 0; border: none; border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--mut); font-size: 0.92rem; padding: 0 0.6rem; margin: 0.55rem 0; cursor: pointer; text-overflow: ellipsis; }
+.search > select { flex: 0 0 auto; width: 4.6rem; min-width: 0; border: none; border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em; padding: 0 0.4rem 0 0.8rem; margin: 0.55rem 0; cursor: pointer; text-overflow: ellipsis; }
 .search > select:focus-visible { outline-offset: -2px; }
 .search > button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem 2rem; margin-left: 0.35rem; font-size: 1.1rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 13px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
 .search > button:hover:not(:disabled) { background: var(--green-d); }
@@ -764,9 +824,8 @@ html { scrollbar-gutter: stable; }
 .unitprice { font-size: 1.25rem; font-weight: 800; color: var(--green-d); }
 .cta { display: inline-block; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; padding: 0.6rem 1.4rem; border-radius: 10px; }
 .cta:hover { background: var(--green-d); }
-.card-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; }
 .card-body > .numbers { contain: inline-size; }
-.paid { color: var(--mut); font-size: 0.75rem; margin-left: auto; }
 .marketing { text-align: center; padding: 1rem 0; }
 .mut { color: var(--mut); }
 .steps, .trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
@@ -781,7 +840,7 @@ footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-
   .hero h1 { font-size: 1.9rem; height: 3.6em; }
   .search { flex-direction: column; gap: 0.35rem; }
   .search-field input { padding: 0.95rem 0.2rem; font-size: 1.1rem; }
-  .search > select { flex: none; border-left: none; border-top: 1px solid var(--line); margin: 0; padding: 0.8rem 1rem; font-size: 1rem; max-width: none; }
+  .search > select { flex: none; width: auto; border-left: none; border-top: 1px solid var(--line); margin: 0; padding: 0.8rem 1rem; font-size: 1rem; max-width: none; }
   .search > button { margin-left: 0; padding: 0.95rem; }
 }
 </style>

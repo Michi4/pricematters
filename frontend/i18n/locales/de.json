@@ -1,5 +1,7 @@
 {
-  "header": { "tagline": "Der ehrliche Preisvergleich" },
+  "header": {
+    "tagline": "Der ehrliche Preisvergleich"
+  },
   "hero": {
     "searchPlaceholder": "Reis, Kaffee, Protein, Erdnussmus …",
     "searchButton": "Vergleichen",
@@ -10,7 +12,10 @@
   "results": {
     "count": "{n} Produkte",
     "zone": "Preise für {zone}",
-    "groups": { "eu": "Europa", "world": "Weltweit" },
+    "groups": {
+      "eu": "Europa",
+      "world": "Weltweit"
+    },
     "shipNote": "Manches ist in deiner Region evtl. nicht lieferbar.",
     "shipSwitch": "Zu amazon.de wechseln",
     "pageOf": "Seite {p} von {n}",
@@ -35,16 +40,27 @@
       "shortAsc": "Preis ↑",
       "shortDesc": "Preis ↓"
     },
-    "unit": { "label": "Anzeigen als" },
+    "unit": {
+      "label": "Anzeigen als"
+    },
     "filterTitle": "Filter & Anzeige",
     "filter": {
       "min": "Min-Preis",
       "max": "Max-Preis",
       "kind": "Art",
       "onlyUnit": "Nur mit Grundpreis",
-      "kinds": { "all": "Alles", "mass": "Gewicht (kg, g)", "volume": "Volumen (l, ml)", "count": "Stückzahl", "storage": "Speicher (GB, TB)" }
+      "kinds": {
+        "all": "Alles",
+        "mass": "Gewicht (kg, g)",
+        "volume": "Volumen (l, ml)",
+        "count": "Stückzahl",
+        "storage": "Speicher (GB, TB)"
+      }
     },
-    "store": { "all": "Alle", "label": "Shops" }
+    "store": {
+      "all": "Alle",
+      "label": "Shops"
+    }
   },
   "faves": {
     "title": "Meine Favoriten",
@@ -83,7 +99,10 @@
     "email": "E-Mail",
     "message": "Nachricht",
     "slot": "Platzierung",
-    "slots": { "rail": "Seitenbanner", "infeed": "Im Feed" },
+    "slots": {
+      "rail": "Seitenbanner",
+      "infeed": "Im Feed"
+    },
     "send": "Anfrage senden",
     "sending": "Wird gesendet …",
     "error": "Senden fehlgeschlagen – schreib uns einfach an werbung@websters.at.",
@@ -91,6 +110,7 @@
   },
   "footer": {
     "by": "Ein Projekt von",
-    "disclosure": "Als Amazon-Partner verdienen wir an qualifizierten Käufen – für dich entstehen keine Mehrkosten. Preise können sich jederzeit ändern – verbindlich ist immer der Preis auf Amazon. Diese Seite nutzt keine Tracking-Cookies, nur zwei technische Einstellungen (Design & Amazon-Land), die ohne personenbezogene Daten bleiben."
+    "disclosure": "Als Amazon-Partner verdienen wir an qualifizierten Käufen – für dich entstehen keine Mehrkosten. Preise können sich jederzeit ändern – verbindlich ist immer der Preis auf Amazon. Diese Seite nutzt keine Tracking-Cookies, nur zwei technische Einstellungen (Design & Amazon-Land), die ohne personenbezogene Daten bleiben.",
+    "star": "Links mit * sind Werbelinks: Bei Kauf erhalten wir ggf. eine Provision."
   }
 }
