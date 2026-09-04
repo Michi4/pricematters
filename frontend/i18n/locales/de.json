@@ -84,10 +84,6 @@
     "t3": "Kostenlos",
     "d3": "Für immer, ohne Konto."
   },
-  "theme": {
-    "darkHint": "Die Seite sieht im Lightmode am besten aus – der Darkmode funktioniert, ist aber nicht 100% perfekt. Achtung: Amazon & externe Seiten sind grellhell – ohne Dark Reader wirst du bei jedem Klick flash-gedbanged.",
-    "ok": "Alles klar"
-  },
   "ads": {
     "label": "Anzeige",
     "sidebar": "Dein Banner hier",

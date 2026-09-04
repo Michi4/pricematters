@@ -210,6 +210,30 @@ def delete_inquiry(inq_id: int, request: Request):
         return JSONResponse(status_code=500, content={"ok": False, "error": "internal"})
 
 
+class Ack(BaseModel):
+    ack: bool
+
+
+@app.patch("/inquiries/{inq_id}")
+def ack_inquiry(inq_id: int, body: Ack, request: Request):
+    """Admin-only: mark an inquiry as resolved/read (or un-mark)."""
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return JSONResponse(status_code=503, content={"ok": False, "error": "no database"})
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute("UPDATE ad_inquiries SET ack = %s WHERE id = %s",
+                        (bool(body.ack), inq_id))
+            updated = cur.rowcount
+        return {"ok": True, "updated": updated}
+    except Exception as e:
+        print(f"[inquiries] ack failed: {e}", flush=True)
+        return JSONResponse(status_code=500, content={"ok": False, "error": "internal"})
+
+
 @app.get("/alerts")
 def get_alerts(request: Request):
     """Poll endpoint for the home-server Signal bridge (admin-key protected).
@@ -503,6 +527,8 @@ def contact(c: Contact, request: Request):
                    (id SERIAL PRIMARY KEY, name TEXT, email TEXT, slot TEXT,
                     message TEXT, created_at TIMESTAMPTZ DEFAULT now())"""
             )
+            # 2026-09: acknowledged flag for the admin dashboard (resolved/read)
+            cur.execute("ALTER TABLE ad_inquiries ADD COLUMN IF NOT EXISTS ack BOOLEAN DEFAULT FALSE")
             cur.execute(
                 "INSERT INTO ad_inquiries (name, email, slot, message) VALUES (%s,%s,%s,%s)",
                 (c.name[:120], c.email[:160], c.slot[:40], c.message[:2000]),
@@ -739,7 +765,8 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 FROM events WHERE kind='search' AND ts > now() - make_interval(days => %s)""", (days,))
             try:
                 out["adInquiries"] = rows("""SELECT id, name, email, slot,
-                    left(message, 500) AS message, created_at::text
+                    left(message, 500) AS message, created_at::text,
+                    COALESCE(ack, FALSE) AS ack
                     FROM ad_inquiries ORDER BY created_at DESC LIMIT 50""")
             except Exception:
                 out["adInquiries"] = []

@@ -206,11 +206,12 @@
         <section class="panel">
           <h2>Ad inquiries <input v-model="finq" class="tfilter" placeholder="filter…" /></h2>
           <p v-if="!(data.adInquiries || []).length" class="mut small">No inquiries yet.</p>
-          <div v-for="(inq, ix) in fInq" :key="inq[0]" class="inq" @click="openInq = openInq === ix ? -1 : ix">
+          <div v-for="(inq, ix) in fInq" :key="inq[0]" class="inq" :class="{ acked: inq[6] }" @click="openInq = openInq === ix ? -1 : ix">
             <div class="inq-row">
               <strong>{{ inq[1] }}</strong>
               <span class="mut inq-mail">&lt;{{ inq[2] }}&gt;</span>
               <span class="mut small inq-meta">{{ inq[3] || 'general' }} · {{ fmtDate(inq[5]) }}</span>
+              <button class="ackbtn" :title="inq[6] ? 'mark as open again' : 'mark as resolved/read'" @click.stop="setAck(inq, !inq[6])">{{ inq[6] ? '✓' : '○' }}</button>
               <button class="delbtn" :class="{ sure: delSure === inq[0] }" :title="delSure === inq[0] ? 'click again to confirm' : 'delete'"
                       @click.stop="askDelete(inq[0])">{{ delSure === inq[0] ? 'sure?' : '✕' }}</button>
             </div>
@@ -351,9 +352,24 @@ function askDelete(id: number) {
   delSure.value = null;
   const backup = data.value?.adInquiries || [];
   data.value.adInquiries = backup.filter((r: any[]) => r[0] !== id);
-  $fetch(`/api/admin/inquiries/${id}`, { method: 'DELETE' })
+  $fetch(`/api/admin/inquiries/${id}`, {
+    method: 'DELETE',
+    headers: { 'x-admin-key': key.value },
+  })
     .then((res: any) => { if (!res?.ok) data.value.adInquiries = backup; })
     .catch(() => { data.value.adInquiries = backup; });
+}
+
+function setAck(inq: any[], ack: boolean) {
+  const backup = inq[6];
+  inq[6] = ack;
+  $fetch(`/api/admin/inquiries/${inq[0]}`, {
+    method: 'PATCH',
+    body: { ack },
+    headers: { 'x-admin-key': key.value },
+  })
+    .then((res: any) => { if (!res?.ok) inq[6] = backup; })
+    .catch(() => { inq[6] = backup; });
 }
 
 let timer: any = null;
@@ -491,6 +507,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .delbtn { background: none; border: 1px solid transparent; border-radius: 6px; color: #dc2626; cursor: pointer; font-size: 0.8rem; padding: 0 0.3rem; }
 .adm.dark .delbtn { color: #f87171; }
 .adm .delbtn:hover, .adm .delbtn.sure { border-color: #dc2626; font-weight: 700; }
+.adm .ackbtn { background: none; border: 1px solid transparent; border-radius: 6px; color: #94a3b8; cursor: pointer; font-size: 0.85rem; padding: 0 0.35rem; }
+.adm .ackbtn:hover { border-color: #16a34a; color: #16a34a; }
+.adm .inq.acked { opacity: 0.55; }
+.adm .inq.acked .ackbtn { color: #16a34a; }
 .adm .inq-msg { margin: 0.6rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f6faf7; border-radius: 8px; padding: 0.6rem; font-size: 0.9rem; }
 .adm.dark .inq-msg { background: #0d140f; }
 .adm .linklike { background: none; border: none; color: #12813c; font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }

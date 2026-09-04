@@ -239,13 +239,6 @@
       </aside>
     </div>
 
-    <Transition name="fade">
-      <div v-if="showDarkHint" class="dark-hint" role="status">
-        <p>{{ t('theme.darkHint') }}</p>
-        <button class="linklike" @click="dismissDarkHint">{{ t('theme.ok') }}</button>
-      </div>
-    </Transition>
-
     <footer>
       <p class="disclosure">{{ t('footer.disclosure') }} {{ t('footer.star') }}</p>
       <p>{{ t('footer.by') }} <a href="https://websters.at" target="_blank" rel="noopener">websters.at</a> · <button class="linklike" @click="adOpen = true">{{ t('ads.title') }}</button></p>
@@ -305,7 +298,6 @@ const plainSlogan = (s: string) => s.replaceAll('*', '');
 const sloganIdx = ref(0);
 let sloganTimer: ReturnType<typeof setInterval> | null = null;
 const theme = ref('light');
-const showDarkHint = ref(false);
 function applyTheme(t: string) {
   theme.value = t;
   document.documentElement.dataset.theme = t;
@@ -314,17 +306,7 @@ function applyTheme(t: string) {
 function toggleTheme() {
   const next = theme.value === 'dark' ? 'light' : 'dark';
   applyTheme(next);
-  // honest one-time hint: light is the polished default, dark works but isn't perfect
-  if (next === 'dark') {
-    try { showDarkHint.value = !localStorage.getItem('pm_dark_hint'); } catch { showDarkHint.value = true; }
-  } else {
-    showDarkHint.value = false;
-  }
   trackEvent('theme', { ref: next });
-}
-function dismissDarkHint() {
-  showDarkHint.value = false;
-  try { localStorage.setItem('pm_dark_hint', '1'); } catch { /* private mode */ }
 }
 const { data: favesData } = await useAsyncData('faves', () =>
   $fetch('/api/curated', { query: { marketplace: 'de' } }).catch(() => ({ items: [] })));
@@ -979,9 +961,6 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .steps div, .trust div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
 .steps p, .trust p { color: var(--mut); font-size: 0.92rem; }
 footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-size: 0.85rem; border-top: 1px solid var(--line); background: var(--card); }
-.dark-hint { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 40; background: #0d140f; color: #e9f1ea; border-radius: 12px; padding: 0.8rem 1.1rem; max-width: 430px; width: calc(100% - 2rem); font-size: 0.88rem; box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
-.dark-hint p { margin: 0 0 0.4rem; }
-.dark-hint .linklike { color: inherit; }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
 @media (max-width: 600px) {
   .hero h1 { font-size: 1.9rem; min-height: 3.4em; }
