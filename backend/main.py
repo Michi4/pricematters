@@ -191,6 +191,25 @@ def health():
     return {"ok": True, "provider": os.getenv("DATA_PROVIDER", "mock")}
 
 
+@app.delete("/inquiries/{inq_id}")
+def delete_inquiry(inq_id: int, request: Request):
+    """Admin-only: remove a single ad inquiry (spam, tests, typos)."""
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return JSONResponse(status_code=503, content={"ok": False, "error": "no database"})
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM ad_inquiries WHERE id = %s", (inq_id,))
+            deleted = cur.rowcount
+        return {"ok": True, "deleted": deleted}
+    except Exception as e:
+        print(f"[inquiries] delete failed: {e}", flush=True)
+        return JSONResponse(status_code=500, content={"ok": False, "error": "internal"})
+
+
 @app.get("/ready")
 def ready():
     """Readiness: can this instance actually serve /search right now?
@@ -257,8 +276,17 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
     if single:
         chain = [single]
     else:
-        chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
-        chain = chain or [os.getenv("DATA_PROVIDER", "mock")]
+        env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
+        if env_chain:
+            chain = env_chain
+        else:
+            # seamless fallback even when only DATA_PROVIDER is pinned:
+            # start there, then walk the rest of the default chain, mock last
+            from providers import DEFAULT_CHAIN as _dc
+            first = os.getenv("DATA_PROVIDER", "")
+            chain = ([first] if first in PROVIDERS else []) + [p for p in _dc if p != first and p != "mock"]
+            if "mock" in _dc:
+                chain.append("mock")
     chain = [c for c in chain if c in PROVIDERS]
     if not chain:
         return {"items": [], "meta": {"chain": chain}, "error": "no known provider in chain"}
@@ -601,11 +629,11 @@ def _admin_ok(request: Request) -> bool:
 
 
 @app.get("/stats")
-def stats(request: Request, days: int = Query(30)):
+def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12, le=168)):
     """Admin-only aggregates for the /admin page."""
     if not _admin_ok(request):
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
-    days = max(1, min(days, 365))
+    days = max(1, min(days, 3650))  # 3650 ≈ all-time
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -654,11 +682,11 @@ def stats(request: Request, days: int = Query(30)):
                 COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ms)), 0)
                 FROM events WHERE ms > 0 AND ts > now() - make_interval(days => %s)
                 GROUP BY kind""", (days,))
-            # 48h activity, zero-filled so the chart never shows gaps
-            out["hourly"] = rows("""SELECT gs.h::text,
+            # hourly activity, zero-filled so the chart never shows gaps
+            out["hourly"] = rows(f"""SELECT gs.h::text,
                 COUNT(e.kind) FILTER (WHERE e.kind = 'search'),
                 COUNT(e.kind) FILTER (WHERE e.kind = 'click')
-                FROM generate_series(date_trunc('hour', now()) - interval '47 hours',
+                FROM generate_series(date_trunc('hour', now()) - interval '{int(hours) - 1} hours',
                                      date_trunc('hour', now()), interval '1 hour') AS gs(h)
                 LEFT JOIN events e ON date_trunc('hour', e.ts) = gs.h
                 GROUP BY 1 ORDER BY 1""")
@@ -668,17 +696,23 @@ def stats(request: Request, days: int = Query(30)):
             out["avgResults"] = rows("""SELECT ROUND(AVG(result_count)::numeric, 1)
                 FROM events WHERE kind='search' AND ts > now() - make_interval(days => %s)""", (days,))
             try:
-                out["adInquiries"] = rows("""SELECT name, email, slot,
+                out["adInquiries"] = rows("""SELECT id, name, email, slot,
                     left(message, 500) AS message, created_at::text
                     FROM ad_inquiries ORDER BY created_at DESC LIMIT 50""")
             except Exception:
                 out["adInquiries"] = []
             # non-secret runtime facts for the admin system panel
+            try:
+                from providers import DEFAULT_CHAIN as _dc
+                default_chain = ",".join(_dc)
+            except Exception:
+                default_chain = ""
             out["system"] = {
                 "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
                 "smtpTo": os.getenv("SMTP_TO", "office@websters.at") if os.getenv("SMTP_USER") else None,
                 "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
                 "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
+                "providerChain": os.getenv("DATA_PROVIDERS", "") or default_chain,
             }
             return out
     except Exception as e:
