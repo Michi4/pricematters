@@ -617,7 +617,7 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
         if r is not None:
             raw = r.get(ck)
             if raw:
-                return json.loads(raw)
+                return {"items": json.loads(raw)}
     except Exception:
         pass
     try:
