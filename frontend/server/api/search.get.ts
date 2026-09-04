@@ -23,8 +23,10 @@ export default defineEventHandler(async (event) => {
       })),
       meta: backend.meta || {},
     };
-  } catch {
-    // mock fallback for UI dev
+  } catch (e: any) {
+    // HTTP errors (429 rate limit, 5xx) must reach the UI so it can show the
+    // retry banner — mock fallback is only for local dev without a backend
+    if (e?.status || e?.response?.status || e?.statusCode) throw e;
     const mocks = [
       { asin: 'MOCK1', title: 'Bio Basmati Reis, 2 x 1kg', priceCents: 1299, url: 'https://www.amazon.de/dp/MOCK1', store: 'Amazon' },
       { asin: 'MOCK2', title: 'Bio Kaffee Bohnen 500g', priceCents: 899, url: 'https://www.amazon.de/dp/MOCK2', store: 'Amazon' },

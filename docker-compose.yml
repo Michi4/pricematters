@@ -8,6 +8,7 @@ services:
       NUXT_PORT: 3000
       # NOTE: nuxt.config is evaluated at BUILD time, so runtime overrides need
       # the NITRO_/NUXT_ prefixes (read per request, no rebuild needed).
+      NUXT_BACKEND_URL: http://backend:8000
       NITRO_BACKEND_URL: http://backend:8000
       NUXT_PUBLIC_DEFAULT_LOCALE: ${NUXT_PUBLIC_DEFAULT_LOCALE:-de-AT}
       NUXT_PUBLIC_AFFILIATE_TAG: ${NUXT_PUBLIC_AFFILIATE_TAG:-websters02-21}
@@ -20,6 +21,7 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK}"
       - "traefik.http.routers.${ROUTER_NAME}.rule=${ROUTER_RULE}"
       - "traefik.http.routers.${ROUTER_NAME}.entrypoints=http"
       - "traefik.http.routers.${ROUTER_NAME}.middlewares=${ROUTER_NAME}-redirect"
@@ -43,8 +45,10 @@ services:
     expose:
       - "8000"
     depends_on:
-      - database
-      - redis
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - app-network
 
@@ -52,15 +56,22 @@ services:
     container_name: pricematters-db
     image: postgres:16-alpine
     restart: unless-stopped
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    # internal only: reachable over app-network, never from the host/internet
+    expose:
+      - "5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pricematters}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pricematters}
+      # fail fast instead of silently booting a known password in prod
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
       POSTGRES_DB: ${POSTGRES_DB:-pricematters}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     networks:
       - app-network
 
@@ -69,8 +80,14 @@ services:
     image: redis:7-alpine
     command: redis-server --maxmemory 256mb --maxmemory-policy volatile-lfu
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # internal only: cache poisoning via an exposed redis would mean fake prices
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     volumes:
       - redis-data:/data
     networks:

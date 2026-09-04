@@ -55,7 +55,7 @@
             <span class="btn-label">{{ pending ? t('hero.searching') : t('hero.searchButton') }}</span>
           </button>
         </form>
-        <p class="popular">{{ t('hero.popular') }}
+        <p v-if="popular.length" class="popular">{{ t('hero.popular') }}
           <TransitionGroup name="fade">
             <button v-for="p in popular" :key="p" @click="q = p; search()">{{ p }}</button>
           </TransitionGroup>
@@ -338,9 +338,10 @@ function faveUnit(f: any) {
 }
 async function loadPopular() {
   try {
-    const data = await $fetch('/api/popular', { query: { marketplace: marketplace.value, lang: locale.value } }) as any;
-    if (data?.items?.length) popularApi.value = data.items;
-  } catch { /* static fallback stays */ }
+    // marketplace=all merges every market/language on the backend
+    const data = await $fetch('/api/popular', { query: { marketplace: 'all', lang: locale.value } }) as any;
+    popularApi.value = data?.items || [];
+  } catch { popularApi.value = []; }
 }
 onMounted(() => {
   timer = setInterval(() => { sloganIdx.value = (sloganIdx.value + 1) % Math.max(slogans.value.length, 1); }, 5000);
@@ -351,6 +352,8 @@ onMounted(() => {
   } catch { applyTheme('light'); }
   loadPopular();
   marketplace.value = guessMarketplace();
+  // SSR faves always render marketplace 'de'; re-fetch for the guessed locale
+  loadFaves();
   try { userTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* ignore */ }
   if (route.query.q) { q.value = String(route.query.q); search(); }
 });
@@ -423,7 +426,8 @@ const searchRetry = ref(0);
 const modalEl = ref<HTMLElement | null>(null);
 
 // refresh faves + popular when marketplace changes (registered once, not per search)
-watch(marketplace, () => { loadFaves(); loadPopular(); });
+watch(marketplace, () => { loadFaves(); });
+watch(locale, () => { loadPopular(); });
 
 function onModalKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && adOpen.value) adOpen.value = false;
@@ -452,9 +456,8 @@ async function submitContact() {
 }
 
 const popularApi = ref<string[]>([]);
-const popular = computed(() => popularApi.value.length ? popularApi.value : (locale.value === 'de'
-  ? ['Reis', 'Kaffee', 'Protein', 'Erdnussmus']
-  : ['Rice', 'Coffee', 'Protein', 'Peanut butter']));
+// real user searches only — no placeholders; empty until the backend has data
+const popular = computed(() => popularApi.value);
 const MARKETS = [
   { code: 'de', cc: 'DE', domain: 'amazon.de', group: 'eu' },
   { code: 'at', cc: 'AT', domain: 'amazon.de', group: 'eu' },
@@ -522,7 +525,12 @@ async function search() {
     results.value = (data as any).items || [];
     meta.value = (data as any).meta || {};
     searched.value = true;
+    // a new search must not silently inherit the previous search's filters
     storeFilter.value = 'all';
+    minPrice.value = '';
+    maxPrice.value = '';
+    kindFilter.value = 'all';
+    onlyUnit.value = true;
     page.value = 1;
     trackEvent('search', {
       query: q.value, marketplace: marketplace.value,
@@ -693,7 +701,7 @@ html { scrollbar-gutter: stable; }
 @keyframes shine { to { background-position: -200% 0; } }
 .error.banner { background: #fef3c7; color: #92400e; font-weight: 600; padding: 0.7rem 1rem; border-radius: 12px; text-align: center; }
 [data-theme="dark"] .error.banner { background: #453304; color: #fcd34d; }
-.popular { color: var(--mut); font-size: 0.9rem; min-height: 1.6em; }
+.popular { color: var(--mut); font-size: 0.9rem; }
 .popular button { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 0.2rem 0.8rem; margin: 0.15rem; cursor: pointer; color: var(--green-d); }
 .popular button:hover { border-color: var(--green); }
 .meta-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; color: var(--mut); font-size: 0.9rem; margin: 1rem 0; min-height: 1.8em; }

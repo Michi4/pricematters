@@ -16,16 +16,19 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd "${{ secrets.DEPLOY_PATH }}"
             git pull --ff-only
-            cp -n .env.example .env || true
+            if [ ! -f .env ]; then echo "FATAL: .env missing on server" >&2; exit 1; fi
             docker compose up -d --build
             # backend needs a few seconds after recreate — retry instead of failing CI
+            ok=""
             for i in $(seq 1 12); do
               if docker compose exec -T backend python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health', timeout=10).read().decode())" 2>/dev/null; then
-                break
+                ok=1; break
               fi
               sleep 10
             done
+            # a dead backend must show as a red X, not a green deploy
+            if [ -z "$ok" ]; then echo "FATAL: backend health check failed after 2 min" >&2; exit 1; fi
             # pre-warm popular queries so first clicks hit cache, not provider budget
             docker compose exec -T backend python warm.py || true

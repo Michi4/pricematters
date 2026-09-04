@@ -41,7 +41,11 @@ COLS = ["kind", "query", "marketplace", "result_count", "ipd", "country", "lang"
         "tz", "device", "w", "asin", "store", "pos", "title", "price_cents", "ms", "ref"]
 
 
+_ensured = False
+
+
 def track(payload: dict) -> bool:
+    global _ensured
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -50,9 +54,12 @@ def track(payload: dict) -> bool:
         p = {c: payload.get(c) for c in COLS}
         p = {k: (str(v)[:180] if v is not None else None) for k, v in p.items()}
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
-            cur.execute(DDL)
-            for stmt in IDX:
-                cur.execute(stmt)
+            # schema is static — create it once per process, not on every event
+            if not _ensured:
+                cur.execute(DDL)
+                for stmt in IDX:
+                    cur.execute(stmt)
+                _ensured = True
             cols = ", ".join(COLS)
             marks = ", ".join(f"%({c})s" for c in COLS)
             cur.execute(f"INSERT INTO events ({cols}) VALUES ({marks})", p)

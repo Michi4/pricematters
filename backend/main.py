@@ -7,6 +7,7 @@ Feed shops:  Awin & co via nightly CSV import (feeds.py) into Postgres,
 Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
 import os
+import threading
 import time
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
@@ -18,8 +19,11 @@ from translate import query_variants
 
 app = FastAPI(title="PriceMatters API")
 DEFAULT_TAG = "websters02-21"
-# bump to invalidate all cached rows (e.g. after provider param changes like delivery zones)
+# cache stores RAW rows; qty/unit-price are re-enriched per request, so extractor
+# fixes apply to cached data without bumping this. Bump only for provider-param changes.
 CACHE_VERSION = "v2"
+
+MAX_QUERY_LEN = 120
 
 # per-IP rate limits for /search: what a normal user never hits, bots do
 RATE_MIN = int(os.getenv("RATE_SEARCH_PER_MIN", "20"))
@@ -27,8 +31,16 @@ RATE_HOUR = int(os.getenv("RATE_SEARCH_PER_HOUR", "100"))
 
 
 def _client_ip(request: Request) -> str:
+    # Traefik sets X-Real-Ip to the verified client IP; XFF's leftmost entry is
+    # attacker-controlled, so it must never win.
+    real = request.headers.get("x-real-ip", "").strip()
+    if real:
+        return real
     xff = request.headers.get("x-forwarded-for", "")
-    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "anon")
+    # rightmost XFF entry = closest trusted proxy hop (added by our own Traefik)
+    if xff:
+        return xff.split(",")[-1].strip()
+    return request.client.host if request.client else "anon"
 
 
 def _rate_retry_after(request: Request) -> int:
@@ -57,19 +69,26 @@ def _rate_retry_after(request: Request) -> int:
 
 
 def log_search(query: str, marketplace: str, count: int):
-    """Fire-and-forget: feeds the 'Popular' row. No DB -> silently skipped."""
-    try:
-        import psycopg
-        url = os.getenv("DATABASE_URL", "")
-        if not url:
-            return
-        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO searches (query, marketplace, result_count) VALUES (%s,%s,%s)",
-                (query[:120], marketplace, count),
-            )
-    except Exception:
-        pass
+    """Fire-and-forget in a daemon thread: feeds the 'Popular' row. No DB -> silently skipped."""
+    def _run():
+        try:
+            import psycopg
+            url = os.getenv("DATABASE_URL", "")
+            if not url:
+                return
+            with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+                cur.execute("""CREATE TABLE IF NOT EXISTS searches (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ DEFAULT now(),
+                    query TEXT, marketplace TEXT, result_count INT)""")
+                cur.execute("CREATE INDEX IF NOT EXISTS searches_market_ts ON searches (marketplace, created_at DESC)")
+                cur.execute(
+                    "INSERT INTO searches (query, marketplace, result_count) VALUES (%s,%s,%s)",
+                    (query[:120], marketplace, count),
+                )
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True).start()
 
 def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, image: str | None, marketplace: str) -> dict:
     from ai_extract import ai_quantity
@@ -99,13 +118,17 @@ def extract(title: str = Query(...), description: str = ""):
 
 
 @app.get("/search")
-def search(request: Request, q: str = Query(...), marketplace: str = Query("de"),
+def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), marketplace: str = Query("de"),
            provider: str | None = Query(None), stores: str = Query("all"),
            lang: str = Query(""), tz: str = Query(""), w: int = Query(0)):
     # BIO = bio = Bio: searches & cache keys are case-insensitive,
     # display keeps the user's casing
-    q = " ".join(q.split())
-    ql = q.lower()
+    q = " ".join(q.split()).lower()[:MAX_QUERY_LEN]
+    ql = q
+    # marketplace whitelist: anything unknown means junk cache keys / bad links
+    from providers import AMAZON
+    if marketplace not in AMAZON:
+        marketplace = "de"
     wait = _rate_retry_after(request)
     if wait:
         try:
@@ -169,7 +192,9 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
             used = cand
             break
         except RuntimeError as e:
-            errors[cand] = str(e)
+            # log details server-side only; raw provider strings must not reach clients
+            print(f"[search] provider {cand} failed for {ql!r}: {e}", flush=True)
+            errors[cand] = "unavailable"
             rows = []
             continue
     if not rows and "mock" not in chain:
@@ -194,15 +219,20 @@ def search(request: Request, q: str = Query(...), marketplace: str = Query("de")
                 items.append(enrich(*row, marketplace))
             meta["feed_shops"] = "included"
         except (RuntimeError, ImportError) as e:
-            meta["feed_shops"] = str(e)
+            print(f"[search] feeds unavailable: {e}", flush=True)
+            meta["feed_shops"] = "unavailable"
 
-    items.sort(key=lambda i: (i["unitPrice"] is None, (i["unitPrice"] or {}).get("per", 1e18)))
+    items.sort(key=lambda i: (i["unitPrice"] is None,
+                              (i["unitPrice"] or {}).get("base", "?"),
+                              (i["unitPrice"] or {}).get("per", 1e18)))
     log_search(ql, marketplace, len(items))
     return {"items": items, "meta": meta}
 
 
 @app.get("/cache/stats")
-def cache_stats():
+def cache_stats(request: Request):
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
     from cache import stats
     return stats()
 
@@ -265,8 +295,22 @@ class Contact(BaseModel):
 
 
 @app.post("/contact")
-def contact(c: Contact):
+def contact(c: Contact, request: Request):
     """Ad-slot inquiry: Postgres if available, stdout log otherwise. Always honest ok-flag."""
+    # simple spam guard: same shared limiter style as /search, 3 per 10 min per IP
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            mk = f"{CACHE_VERSION}:ctl:{_client_ip(request)}:{int(time.time()) // 600}"
+            if r.incr(mk) == 1:
+                r.expire(mk, 660)
+            if int(r.get(mk) or 0) > 3:
+                return JSONResponse(status_code=429, content={"ok": False, "error": "rate_limited"})
+    except Exception:
+        pass
+    if not (c.name.strip() or c.email.strip()) or not c.message.strip():
+        return JSONResponse(status_code=400, content={"ok": False, "error": "invalid"})
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -284,40 +328,60 @@ def contact(c: Contact):
             )
         return {"ok": True, "stored": "db"}
     except Exception as e:
-        print(f"[contact] {c.slot} {c.name} <{c.email}>: {c.message[:200]} ({e})", flush=True)
+        # no PII in logs: acknowledge without content
+        print(f"[contact] inquiry stored to log ({e})", flush=True)
         return {"ok": True, "stored": "log"}
 
 
 @app.get("/popular")
-def popular(marketplace: str = Query("de"), lang: str = Query("de"), limit: int = Query(4)):
-    """Top user queries, last 30 days, translated to the UI language.
-    [] -> frontend falls back to static hints."""
+def popular(marketplace: str = Query("all"), lang: str = Query("de"), limit: int = Query(4)):
+    """Top real user queries, last 30 days. marketplace=all merges every
+    marketplace/language; a specific code filters. Translated to the UI language.
+    [] -> frontend shows nothing (no placeholders)."""
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
         if not url:
             return {"items": []}
+        all_mk = marketplace in ("", "all", "*")
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
-            cur.execute(
-                """SELECT query, COUNT(*) AS c FROM searches
-                   WHERE marketplace = %s AND created_at > now() - interval '30 days'
-                   GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
-                (marketplace, max(limit * 2, 8)),
-            )
-            queries = [r[0] for r in cur.fetchall()]
-        # translate chips to the selected UI language (de marketplaces are typed de, rest en)
+            if all_mk:
+                # merge all markets: same string typed anywhere sums up;
+                # marketplaces kept per query so we know the source language
+                cur.execute(
+                    """SELECT query, COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
+                       FROM searches
+                       WHERE created_at > now() - interval '30 days' AND query <> ''
+                       GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
+                    (max(limit * 2, 8),),
+                )
+                rows = cur.fetchall()
+            else:
+                cur.execute(
+                    """SELECT query, COUNT(*) AS c, array_agg(DISTINCT marketplace) AS mps
+                       FROM searches
+                       WHERE marketplace = %s AND created_at > now() - interval '30 days'
+                         AND query <> ''
+                       GROUP BY query ORDER BY c DESC, MAX(created_at) DESC LIMIT %s""",
+                    (marketplace, max(limit * 2, 8)),
+                )
+                rows = cur.fetchall()
+        # translate chips to the selected UI language.
+        # source language per query: de-ish markets store German queries,
+        # everything else English; a mixed query keeps the majority side
         dst = "de" if lang.lower().startswith("de") else "en"
-        src = "de" if marketplace in ("de", "at", "ch") else "en"
-        if src != dst:
-            from translate import translate
-            queries = [translate(q, src, dst).rstrip(' ?.!').strip() or q for q in queries]
         seen: set[str] = set()
         out: list[str] = []
-        for q in queries:
-            k = q.lower()
+        for query, _c, mps in rows:
+            src = "de" if mps and all(str(m) in ("de", "at", "ch") for m in mps) else "en"
+            text = query
+            if src != dst:
+                from translate import translate
+                text = translate(query, src, dst).rstrip(' ?.!').strip() or query
+            k = text.lower()
             if k not in seen:
                 seen.add(k)
-                out.append(q)
+                out.append(text)
         return {"items": out[:limit]}
     except Exception:
         return {"items": []}
