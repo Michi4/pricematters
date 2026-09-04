@@ -129,10 +129,14 @@ def _ai_fill(items: list[dict], titles: list[str | None], budget_s: float = 8.0)
     pending = [(i, t) for i, t in enumerate(titles) if t is not None]
     if not pending:
         return
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # no `with` block: executor exit would join hung threads and reintroduce
+    # the stall we're avoiding; shutdown(wait=False) detaches stragglers
+    # (each ai_quantity has its own 6s timeout, so they die on their own)
+    pool = ThreadPoolExecutor(max_workers=4)
+    try:
         futs = {pool.submit(ai_quantity, t): i for i, t in pending}
         deadline = time.time() + budget_s
-        for fut, i in futs.items:
+        for fut, i in futs.items():
             try:
                 q = fut.result(timeout=max(deadline - time.time(), 0.1))
             except Exception:
@@ -142,6 +146,8 @@ def _ai_fill(items: list[dict], titles: list[str | None], budget_s: float = 8.0)
                 up = unit_price(price, q)
                 items[i]["qty"] = {"value": q.value, "unit": q.unit, "kind": q.kind}
                 items[i]["unitPrice"] = {"per": up[0], "base": up[1]} if up else None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _fetch_rows(cand: str, marketplace: str, variants: list[str], seen: set[str], timeout_s: float = 55.0) -> list:
@@ -156,13 +162,17 @@ def _fetch_rows(cand: str, marketplace: str, variants: list[str], seen: set[str]
                 seen.add(row[0])
                 out.append(row)
         return out
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(_run)
-        try:
-            return fut.result(timeout=timeout_s)
-        except FuturesTimeout:
-            print(f"[search] provider {cand} exceeded {timeout_s}s, skipping", flush=True)
-            return []
+    # no `with` block: its exit would join the hung thread and reintroduce the
+    # stall; detach instead (internal per-call timeouts kill it on their own)
+    pool = ThreadPoolExecutor(max_workers=1)
+    fut = pool.submit(_run)
+    try:
+        return fut.result(timeout=timeout_s)
+    except FuturesTimeout:
+        print(f"[search] provider {cand} exceeded {timeout_s}s, skipping", flush=True)
+        return []
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 @app.get("/health")

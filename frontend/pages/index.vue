@@ -37,9 +37,12 @@
         <Transition name="fade" mode="out-in">
           <h1 :key="sloganIdx" v-html="fmtSlogan(slogans[sloganIdx] || '')"></h1>
         </Transition>
-        <form class="search" @submit.prevent="search">
-          <input v-model="q" :placeholder="t('hero.searchPlaceholder')" autofocus @keydown.enter.prevent="search" />
-          <select v-model="marketplace" :title="t('hero.marketplace')" @change="saveMarket">
+        <form class="search" role="search" @submit.prevent="search">
+          <div class="search-field">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
+            <input v-model="q" :placeholder="t('hero.searchPlaceholder')" :aria-label="t('hero.searchPlaceholder')" autofocus @keydown.enter.prevent="search" />
+          </div>
+          <select v-model="marketplace" :aria-label="t('hero.marketplace')" :title="t('hero.marketplace')" @change="saveMarket">
             <optgroup :label="t('results.groups.eu')">
               <option v-for="m in MARKETS.filter((x) => x.group === 'eu')" :key="m.code" :value="m.code">{{ countryName(m.cc) }} · {{ m.domain }}</option>
             </optgroup>
@@ -79,7 +82,7 @@
             </div>
           </div>
           <div class="card-actions">
-            <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`">{{ t('results.atAmazon') }}</a>
+            <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${t('results.atAmazon')}: ${f.title.slice(0, 80)}`" @click="trackEvent('click', { asin: f.asin, store: 'Amazon', pos: fi, title: f.title, price_cents: f.price_cents, marketplace: marketplace })">{{ t('results.atAmazon') }}</a>
             <span class="paid">{{ t('results.paidLink') }}</span>
           </div>
         </article>
@@ -185,7 +188,7 @@
             </div>
           </div>
           <div class="card-actions">
-            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`">
+            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace })">
               {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}
             </a>
             <span class="paid">{{ t('results.paidLink') }}</span>
@@ -611,9 +614,14 @@ useSeoMeta({
 });
 useHead({
   link: [{ rel: 'canonical', href: () => canonical.value }],
-  script: [{
-    type: 'application/ld+json',
-    children: () => JSON.stringify({
+  script: [
+    // theme BEFORE first paint: onMounted runs after SSR HTML shows, which
+    // flashes white for dark-mode users. This blocking head script sets the
+    // dataset (+ base colors) before the body renders. No flash, no dependency.
+    { innerHTML: '(function(){try{if(localStorage.getItem("pm_theme")==="dark"){var d=document.documentElement;d.setAttribute("data-theme","dark");d.style.background="#0d140f";d.style.colorScheme="dark";}}catch(e){}})();' },
+    {
+      type: 'application/ld+json',
+      children: () => JSON.stringify({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: brand.value?.name || 'PriceMatters',
@@ -685,13 +693,18 @@ html { scrollbar-gutter: stable; }
 .hero h1 { font-size: 2.4rem; margin: 0 auto 1.4rem; letter-spacing: -0.02em; max-width: 640px; height: 2.5em; display: flex; align-items: center; justify-content: center; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-.search { display: flex; gap: 0.5rem; max-width: 640px; margin: 0 auto; }
-.search input { flex: 1; padding: 0.85rem 1rem; font-size: 1.05rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
-.search input:focus { outline: none; border-color: var(--green); }
-.search select, .controls select { padding: 0.85rem 0.6rem; border: 2px solid var(--input-line); border-radius: 12px; background: var(--card); color: var(--ink); }
-.search button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem 1.6rem; min-width: 9.5rem; font-size: 1.05rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 12px; cursor: pointer; transition: background 0.15s; }
-.search button:hover:not(:disabled) { background: var(--green-d); }
-.search button:disabled { opacity: 0.75; cursor: wait; }
+.search { display: flex; align-items: stretch; gap: 0; max-width: 720px; margin: 0 auto; background: var(--card); border: 2px solid var(--input-line); border-radius: 18px; padding: 0.35rem; box-shadow: 0 10px 32px rgba(18, 129, 60, 0.10); transition: border-color 0.15s, box-shadow 0.15s; }
+.search:focus-within { border-color: var(--green); box-shadow: 0 10px 34px rgba(18, 129, 60, 0.22); }
+.search-field { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.6rem; padding: 0 0.5rem 0 1rem; }
+.search-field svg { width: 1.4rem; height: 1.4rem; flex: none; color: var(--mut); }
+.search-field input { flex: 1; min-width: 0; border: none; background: transparent; padding: 1.05rem 0.2rem; font-size: 1.2rem; color: var(--ink); }
+.search-field input::placeholder { color: var(--mut); opacity: 0.75; }
+.search-field input:focus { outline: none; }
+.search > select { flex: 0 1 12rem; min-width: 0; border: none; border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--mut); font-size: 0.92rem; padding: 0 0.6rem; margin: 0.55rem 0; cursor: pointer; text-overflow: ellipsis; }
+.search > select:focus-visible { outline-offset: -2px; }
+.search > button { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem 2rem; margin-left: 0.35rem; font-size: 1.1rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 13px; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.search > button:hover:not(:disabled) { background: var(--green-d); }
+.search > button:disabled { opacity: 0.75; cursor: wait; }
 .spin { width: 1.1rem; height: 1.1rem; animation: rot 0.7s linear infinite; }
 @keyframes rot { to { transform: rotate(1turn); } }
 .skel { pointer-events: none; }
@@ -735,6 +748,11 @@ html { scrollbar-gutter: stable; }
 .empty { text-align: center; color: var(--mut); padding: 2rem; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; margin-bottom: 0.8rem; }
 .card.best { border: 2px solid var(--green); }
+/* whole card links to the product: the CTA stays the single real anchor, its
+   hit-area stretches over the card (valid HTML, keyboard + SR friendly) */
+.card:not(.skel) { position: relative; transition: border-color 0.15s, box-shadow 0.15s; }
+.card:not(.skel):hover { border-color: var(--green); box-shadow: 0 6px 22px rgba(18, 129, 60, 0.13); }
+.card:not(.skel) .cta::after { content: ""; position: absolute; inset: 0; border-radius: 14px; }
 .card-top { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; }
 .best-badge { background: var(--green); color: #fff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 20px; text-transform: uppercase; }
 .store { background: #eef4ee; color: var(--mut); font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; }
@@ -759,5 +777,11 @@ footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-
 .dark-hint p { margin: 0 0 0.4rem; }
 .dark-hint .linklike { color: inherit; }
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
-@media (max-width: 600px) { .hero h1 { font-size: 1.9rem; height: 3.6em; } .search { flex-direction: column; } }
+@media (max-width: 600px) {
+  .hero h1 { font-size: 1.9rem; height: 3.6em; }
+  .search { flex-direction: column; gap: 0.35rem; }
+  .search-field input { padding: 0.95rem 0.2rem; font-size: 1.1rem; }
+  .search > select { flex: none; border-left: none; border-top: 1px solid var(--line); margin: 0; padding: 0.8rem 1rem; font-size: 1rem; max-width: none; }
+  .search > button { margin-left: 0; padding: 0.95rem; }
+}
 </style>
