@@ -12,7 +12,12 @@ export default defineEventHandler(async (event) => {
   const tag = config.public.affiliateTag || 'websters02-21';
 
   try {
-    const backend = await $fetch(`${config.backendUrl}/search`, { query: { q, marketplace } }) as any;
+    const backend = await $fetch(`${config.backendUrl}/search`, {
+      query: { q, marketplace },
+      // forward the client chain so backend rate limits/analytics see the real
+      // IP, not the frontend container's ($fetch sends no forwarding headers)
+      headers: fwdClientIp(event),
+    }) as any;
     return {
       items: (backend.items || []).map((it: any) => ({
         ...it,

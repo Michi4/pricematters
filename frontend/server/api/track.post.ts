@@ -1,5 +1,3 @@
-const FWD = [];
-
 // POST /api/track -> backend /track (adds server-observed headers)
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -10,11 +8,11 @@ export default defineEventHandler(async (event) => {
     lang: getHeader(event, 'accept-language') || '',
     platform: getHeader(event, 'sec-ch-ua-platform') || '',
   };
-  void FWD;
   try {
     return await $fetch(`${config.backendUrl}/track`, {
       method: 'POST',
       body: { ...body, ...server },
+      headers: fwdClientIp(event),
     });
   } catch {
     return { ok: false };

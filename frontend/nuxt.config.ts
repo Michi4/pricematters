@@ -21,6 +21,14 @@ export default defineNuxtConfig({
     '/logo-dark.svg': { headers: { 'cache-control': 'public, max-age=604800, immutable' } },
     '/og.png': { headers: { 'cache-control': 'public, max-age=604800' } },
     '/robots.txt': { headers: { 'cache-control': 'public, max-age=86400' } },
+    // baseline security headers on every page (CSP deliberately omitted:
+    // inline-style Nuxt app — ship Report-Only first, enforce after tuning)
+    '/**': { headers: {
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'strict-transport-security': 'max-age=31536000',
+    } },
   },
   app: {
     head: {

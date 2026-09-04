@@ -123,9 +123,12 @@ def store(key: str, payload, price_fingerprint: str):
     if d.get("fp") != price_fingerprint:
         stable = 0
     ttl = _ttl(hits, stable, n)
+    # invariant: key in _order exactly once iff key in _mem (no unbounded growth
+    # on repeated stores of the same key)
+    if key not in _mem:
+        _order.append(key)
     _mem[key] = {"payload": payload, "stored": _now(), "exp": _now() + ttl,
                  "hits": hits, "stable": stable, "fp": price_fingerprint}
-    _order.append(key)
     while len(_mem) > MEM_LIMIT:
         _mem.pop(_order.pop(0), None)
     return {"ttl": ttl, "stable": stable}

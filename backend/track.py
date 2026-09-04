@@ -34,7 +34,8 @@ DDL = """CREATE TABLE IF NOT EXISTS events (
   ms INT, ref TEXT)
 """
 IDX = ["CREATE INDEX IF NOT EXISTS events_kind_ts ON events (kind, ts)",
-       "CREATE INDEX IF NOT EXISTS events_ts ON events (ts)"]
+       "CREATE INDEX IF NOT EXISTS events_ts ON events (ts)",
+       "CREATE INDEX IF NOT EXISTS events_kind_ts_query ON events (kind, ts, query)"]
 
 
 COLS = ["kind", "query", "marketplace", "result_count", "ipd", "country", "lang",

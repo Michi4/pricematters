@@ -46,6 +46,10 @@ function parseNum(s: string): number {
     else t = t.replace(/,/g, '');
   } else if (t.includes(',')) {
     t = t.replace('.', '').replace(',', '.');
+  } else if (t.includes('.')) {
+    // DACH-first: "1.500 ml" = 1500 ml (thousand separator), "1.5" stays decimal
+    const parts = t.split('.');
+    if (parts.length > 1 && parts.slice(1).every((p) => /^\d{3}$/.test(p))) t = parts.join('');
   }
   return parseFloat(t);
 }
@@ -183,7 +187,7 @@ export function convertPer(per: number, base: string, target: string): number | 
   if (target === base) return per;
   if (base === 'kg' && target === '100g') return per / 10;
   if (base === 'l' && target === '100ml') return per / 10;
-  if (base === 'gb' && target === 'tb') return per / 1000;
-  if (base === 'gb' && target === 'mb') return per * 1000;
+  if (base === 'gb' && target === 'tb') return per * 1000;
+  if (base === 'gb' && target === 'mb') return per / 1000;
   return null;
 }

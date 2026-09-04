@@ -8,10 +8,11 @@ Query:       searched as-is + auto-translated (DE<->EN), merged, deduped.
 """
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 import time
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from affiliate import monetize, affiliate_url
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
@@ -68,31 +69,46 @@ def _rate_retry_after(request: Request) -> int:
         return 0  # never block search because the limiter broke
 
 
+# log_search: DDL once per process (not per request), bounded concurrency —
+# a search burst must never exhaust threads or DB connections; drops instead.
+_search_log_sem = threading.Semaphore(8)
+_search_log_ddl_done = False
+
+
 def log_search(query: str, marketplace: str, count: int):
     """Fire-and-forget in a daemon thread: feeds the 'Popular' row. No DB -> silently skipped."""
     def _run():
+        global _search_log_ddl_done
         try:
             import psycopg
             url = os.getenv("DATABASE_URL", "")
             if not url:
                 return
             with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
-                cur.execute("""CREATE TABLE IF NOT EXISTS searches (
-                    id BIGSERIAL PRIMARY KEY,
-                    created_at TIMESTAMPTZ DEFAULT now(),
-                    query TEXT, marketplace TEXT, result_count INT)""")
-                cur.execute("CREATE INDEX IF NOT EXISTS searches_market_ts ON searches (marketplace, created_at DESC)")
+                if not _search_log_ddl_done:
+                    cur.execute("""CREATE TABLE IF NOT EXISTS searches (
+                        id BIGSERIAL PRIMARY KEY,
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        query TEXT, marketplace TEXT, result_count INT)""")
+                    cur.execute("CREATE INDEX IF NOT EXISTS searches_market_ts ON searches (marketplace, created_at DESC)")
+                    cur.execute("CREATE INDEX IF NOT EXISTS searches_created_ts ON searches (created_at DESC)")
+                    _search_log_ddl_done = True
                 cur.execute(
                     "INSERT INTO searches (query, marketplace, result_count) VALUES (%s,%s,%s)",
                     (query[:120], marketplace, count),
                 )
         except Exception:
             pass
-    threading.Thread(target=_run, daemon=True).start()
+        finally:
+            _search_log_sem.release()
+    if _search_log_sem.acquire(blocking=False):
+        threading.Thread(target=_run, daemon=True).start()
+    # else: saturated — skip logging rather than queuing unbounded threads
 
 def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, image: str | None, marketplace: str) -> dict:
-    from ai_extract import ai_quantity
-    q = extract_quantity(title) or ai_quantity(title)
+    # regex only here: the AI fallback runs separately in a bounded pool with a
+    # deadline (see _ai_fill), so one slow model call can't stall the request.
+    q = extract_quantity(title)
     up = unit_price(price_cents, q) if q else None
     return {
         "asin": pid,
@@ -106,13 +122,85 @@ def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, image: s
     }
 
 
+def _ai_fill(items: list[dict], titles: list[str | None], budget_s: float = 8.0):
+    """Resolve regex-misses via AI with bounded parallelism + overall deadline.
+    Items still unresolved after the budget keep qty=None (degrade, don't hang)."""
+    from ai_extract import ai_quantity
+    pending = [(i, t) for i, t in enumerate(titles) if t is not None]
+    if not pending:
+        return
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futs = {pool.submit(ai_quantity, t): i for i, t in pending}
+        deadline = time.time() + budget_s
+        for fut, i in futs.items:
+            try:
+                q = fut.result(timeout=max(deadline - time.time(), 0.1))
+            except Exception:
+                continue
+            if q and items[i].get("qty") is None:
+                price = items[i]["priceCents"]
+                up = unit_price(price, q)
+                items[i]["qty"] = {"value": q.value, "unit": q.unit, "kind": q.kind}
+                items[i]["unitPrice"] = {"per": up[0], "base": up[1]} if up else None
+
+
+def _fetch_rows(cand: str, marketplace: str, variants: list[str], seen: set[str], timeout_s: float = 55.0) -> list:
+    """Run one provider candidate with an overall deadline so a stalled source
+    (living-room proxies, hung API) degrades to the next provider, not a hung worker."""
+    def _run():
+        out = []
+        for v in variants:
+            for row in PROVIDERS[cand](v, marketplace):
+                if row[0] in seen:
+                    continue
+                seen.add(row[0])
+                out.append(row)
+        return out
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(_run)
+        try:
+            return fut.result(timeout=timeout_s)
+        except FuturesTimeout:
+            print(f"[search] provider {cand} exceeded {timeout_s}s, skipping", flush=True)
+            return []
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "provider": os.getenv("DATA_PROVIDER", "mock")}
 
 
+@app.get("/ready")
+def ready():
+    """Readiness: can this instance actually serve /search right now?
+    Checks Redis (rate limiter) and Postgres (popular/track) without writing."""
+    checks: dict = {}
+    try:
+        from cache import _redis
+        r = _redis()
+        # unconfigured Redis = degraded (limiters fail open by design), not down
+        checks["redis"] = bool(r.ping()) if r is not None else None
+    except Exception:
+        checks["redis"] = False
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if url:
+            with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            checks["db"] = True
+        else:
+            checks["db"] = None  # unconfigured: degraded, not down
+    except Exception:
+        checks["db"] = False
+    ok = checks.get("redis", False) is not False and checks.get("db", None) is not False
+    # Redis down only fails open the limiters (documented) — still report it
+    status = 200 if ok else 503
+    return JSONResponse(status_code=status, content={"ok": ok, **checks})
+
+
 @app.get("/extract")
-def extract(title: str = Query(...), description: str = ""):
+def extract(title: str = Query(..., max_length=2000), description: str = Query("", max_length=2000)):
     q = extract_quantity(title, description)
     return {"qty": q.__dict__ if q else None}
 
@@ -125,6 +213,8 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
     # display keeps the user's casing
     q = " ".join(q.split()).lower()[:MAX_QUERY_LEN]
     ql = q
+    if not ql:
+        return {"items": [], "meta": {}}
     # marketplace whitelist: anything unknown means junk cache keys / bad links
     from providers import AMAZON
     if marketplace not in AMAZON:
@@ -177,13 +267,7 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
         try:
             variants = query_variants(ql, marketplace) if cand != "mock" else [ql]
             meta["queries"] = variants
-            rows = []
-            for v in variants:
-                for row in PROVIDERS[cand](v, marketplace):
-                    if row[0] in seen:
-                        continue
-                    seen.add(row[0])
-                    rows.append(row)
+            rows = _fetch_rows(cand, marketplace, variants, seen)
             if not rows:
                 raise RuntimeError("no rows")
             fp = "|".join(f"{r[0]}:{r[2]}" for r in rows)
@@ -205,9 +289,16 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
     meta["provider_used"] = used
     meta["demo"] = used in ("mock", "mock-fallback")
     name = used
-    for row in rows:
+    ai_titles: list[str | None] = []
+
+    def _add(row):
         seen.add(row[0])
         items.append(enrich(*row, marketplace))
+        # row layout: (pid, title, price_cents, url, shop, image)
+        ai_titles.append(row[1] if items[-1].get("qty") is None else None)
+
+    for row in rows:
+        _add(row)
 
     if stores == "all":
         try:
@@ -215,12 +306,14 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
             for row in search_feeds(q):
                 if row[0] in seen:
                     continue
-                seen.add(row[0])
-                items.append(enrich(*row, marketplace))
+                _add(row)
             meta["feed_shops"] = "included"
         except (RuntimeError, ImportError) as e:
             print(f"[search] feeds unavailable: {e}", flush=True)
             meta["feed_shops"] = "unavailable"
+
+    # AI fallback for regex-misses only, bounded pool + deadline (degrades, never hangs)
+    _ai_fill(items, ai_titles)
 
     items.sort(key=lambda i: (i["unitPrice"] is None,
                               (i["unitPrice"] or {}).get("base", "?"),
@@ -259,7 +352,7 @@ def curated(marketplace: str = Query("de")):
     from providers import serpapi_product
     items = []
     for c in CURATED:
-        key, data = f"v2:curated:{c['asin']}", None
+        key, data = f"{CACHE_VERSION}:curated:{c['asin']}", None
         hit = cache_get(key)
         if hit:
             data, _age, _hits = hit
@@ -288,10 +381,10 @@ def curated(marketplace: str = Query("de")):
 
 
 class Contact(BaseModel):
-    name: str = ""
-    email: str = ""
-    message: str = ""
-    slot: str = ""
+    name: str = Field("", max_length=120)
+    email: str = Field("", max_length=160)
+    message: str = Field("", max_length=2000)
+    slot: str = Field("", max_length=40)
 
 
 @app.post("/contact")
@@ -334,7 +427,7 @@ def contact(c: Contact, request: Request):
 
 
 @app.get("/popular")
-def popular(marketplace: str = Query("all"), lang: str = Query("de"), limit: int = Query(4)):
+def popular(marketplace: str = Query("all"), lang: str = Query("de"), limit: int = Query(4, le=20)):
     """Top real user queries, last 30 days. marketplace=all merges every
     marketplace/language; a specific code filters. Translated to the UI language.
     [] -> frontend shows nothing (no placeholders)."""
@@ -390,27 +483,42 @@ def popular(marketplace: str = Query("all"), lang: str = Query("de"), limit: int
 # ---------- anonymous first-party analytics (DSGVO-safe) ----------
 
 class Track(BaseModel):
-    kind: str = ""
-    query: str = ""
-    marketplace: str = ""
+    kind: str = Field("", max_length=40)
+    query: str = Field("", max_length=180)
+    marketplace: str = Field("", max_length=40)
     result_count: int = 0
-    country: str = ""
-    lang: str = ""
-    tz: str = ""
-    device: str = ""
+    country: str = Field("", max_length=16)
+    lang: str = Field("", max_length=32)
+    tz: str = Field("", max_length=64)
+    device: str = Field("", max_length=32)
     w: int = 0
-    asin: str = ""
-    store: str = ""
+    asin: str = Field("", max_length=32)
+    store: str = Field("", max_length=40)
     pos: int = 0
-    title: str = ""
+    title: str = Field("", max_length=180)
     price_cents: int = 0
     ms: int = 0
-    ref: str = ""
+    ref: str = Field("", max_length=180)
 
 
 @app.post("/track")
 def track_event(t: Track, request: Request):
     """Fire-and-forget collector. No cookies, no raw IPs (daily-salted hash only)."""
+    # same shared-limiter style as /contact: 30/min per IP keeps the events
+    # table safe from bloat bots; fail-open like the rest (never lose analytics
+    # because the limiter broke)
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            mk = f"{CACHE_VERSION}:trl:{_client_ip(request)}:{int(time.time()) // 60}"
+            n = r.incr(mk)
+            if n == 1:
+                r.expire(mk, 90)
+            if n > 30:
+                return JSONResponse(status_code=429, content={"ok": False, "error": "rate_limited"})
+    except Exception:
+        pass
     from track import ip_hash, track
     ok = track({"kind": t.kind[:40], "query": t.query, "marketplace": t.marketplace,
                 "result_count": t.result_count, "ipd": ip_hash(_client_ip(request)),
@@ -423,7 +531,8 @@ def track_event(t: Track, request: Request):
 def _admin_ok(request: Request) -> bool:
     import hmac
     key = os.getenv("ADMIN_KEY", "")
-    supplied = request.query_params.get("key", "") or request.headers.get("x-admin-key", "")
+    # header only: a ?key= URL param would land in Traefik/uvicorn access logs
+    supplied = request.headers.get("x-admin-key", "")
     return bool(key) and hmac.compare_digest(supplied, key)
 
 
@@ -486,4 +595,6 @@ def stats(request: Request, days: int = Query(30)):
                 out["adInquiries"] = []
             return out
     except Exception as e:
-        return {"error": str(e)}
+        # log details server-side only; raw DB errors must not reach clients
+        print(f"[stats] {e}", flush=True)
+        return {"error": "internal"}

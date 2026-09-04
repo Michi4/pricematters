@@ -3,7 +3,11 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const config = useRuntimeConfig();
   try {
-    const res = await $fetch(`${config.backendUrl}/contact`, { method: 'POST', body }) as any;
+    const res = await $fetch(`${config.backendUrl}/contact`, {
+      method: 'POST',
+      body,
+      headers: fwdClientIp(event),
+    }) as any;
     return { ok: !!res?.ok };
   } catch {
     return { ok: false };

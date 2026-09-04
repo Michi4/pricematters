@@ -60,6 +60,12 @@ def _num(s: str) -> float:
             t = t.replace(",", "")
     elif "," in t:
         t = t.replace(".", "").replace(",", ".")
+    elif "." in t:
+        # DACH-first: "1.500 ml" = 1500 ml (thousand separator), "1.5" stays decimal.
+        # A dot followed by exactly-3-digit groups is thousands, not a decimal point.
+        parts = t.split(".")
+        if len(parts) > 1 and all(len(p) == 3 and p.isdigit() for p in parts[1:]):
+            t = "".join(parts)
     return float(t)
 
 

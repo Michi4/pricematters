@@ -18,17 +18,22 @@ def get(path: str):
         return json.loads(r.read().decode())
 
 
-try:
-    popular = get("/popular?marketplace=de").get("items", [])
-except Exception as e:
-    print("popular failed:", e)
-    popular = []
+def main():
+    try:
+        popular = get("/popular?marketplace=de").get("items", [])
+    except Exception as e:
+        print("popular failed:", e)
+        popular = []
 
-for q in list(dict.fromkeys(popular + DEFAULTS))[:12]:
-    for mp in ("de", "com"):
-        try:
-            d = get("/search?" + urllib.parse.urlencode({"q": q, "marketplace": mp}))
-            print(f"{mp} {q}: {len(d.get('items', []))} via {d.get('meta', {}).get('provider_used')}",
-                  flush=True)
-        except Exception as e:
-            print(f"{mp} {q}: FAIL {e}", flush=True)
+    for q in list(dict.fromkeys(popular + DEFAULTS))[:12]:
+        for mp in ("de", "com"):
+            try:
+                d = get("/search?" + urllib.parse.urlencode({"q": q, "marketplace": mp}))
+                print(f"{mp} {q}: {len(d.get('items', []))} via {d.get('meta', {}).get('provider_used')}",
+                      flush=True)
+            except Exception as e:
+                print(f"{mp} {q}: FAIL {e}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
