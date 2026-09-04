@@ -95,7 +95,7 @@
     "cta": "Platz anfragen",
     "infeed": "Dein Produkt könnte hier stehen.",
     "title": "Werbung auf PriceMatters",
-    "text": "Gesponserte Plätze — immer klar als Anzeige markiert, nie als Ergebnis getarnt. Aktuell ist alles frei.",
+    "text": "Gesponserte Plätze — aktuell ist alles frei.",
     "name": "Name",
     "email": "E-Mail",
     "message": "Nachricht",
@@ -107,7 +107,9 @@
     "send": "Anfrage senden",
     "sending": "Wird gesendet …",
     "error": "Senden fehlgeschlagen – schreib uns einfach an werbung@websters.at.",
-    "done": "Danke! Wir melden uns in Kürze."
+    "done": "Danke! Wir melden uns in Kürze.",
+    "limit": "Du hast heute bereits eine Anfrage gesendet. Für alles Weitere erreichst du uns direkt: office@websters.at",
+    "err": "Senden fehlgeschlagen. Bitte versuch es später erneut oder schreib an office@websters.at"
   },
   "footer": {
     "by": "Ein Projekt von",

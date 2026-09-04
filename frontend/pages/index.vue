@@ -256,7 +256,7 @@
         <button class="modal-x" @click="adOpen = false" aria-label="Close">✕</button>
         <h2>{{ t('ads.title') }}</h2>
         <p class="mut">{{ t('ads.text') }}</p>
-        <form v-if="!adSent" class="ad-form" @submit.prevent="submitContact">
+        <form v-if="!adSent && !adLimited" class="ad-form" @submit.prevent="submitContact">
           <div class="row">
             <label>{{ t('ads.name') }}<input v-model="adName" required maxlength="120" /></label>
             <label>{{ t('ads.email') }}<input v-model="adEmail" type="email" required maxlength="160" /></label>
@@ -271,6 +271,7 @@
           <button type="submit" :disabled="adSending">{{ adSending ? t('ads.sending') : t('ads.send') }}</button>
           <p v-if="adError" class="error">{{ t('ads.error') }}</p>
         </form>
+        <p v-else-if="adLimited" class="done limit">{{ t('ads.limit') }}</p>
         <p v-else class="done">{{ t('ads.done') }}</p>
       </div>
     </div>
@@ -525,6 +526,7 @@ const adSlot = ref('rail');
 const adSending = ref(false);
 const adSent = ref(false);
 const adError = ref(false);
+const adLimited = ref(false);
 const adOpen = ref(false);
 const searchError = ref(false);
 const searchRetry = ref(0);
@@ -550,8 +552,10 @@ async function submitContact() {
     const res = await $fetch('/api/contact', {
       method: 'POST',
       body: { name: adName.value, email: adEmail.value, message: adMsg.value, slot: adSlot.value },
+      ignoreResponseError: true,
     }) as any;
     if (res?.ok) adSent.value = true;
+    else if (res?.error === 'daily_limit') adLimited.value = true;
     else adError.value = true;
   } catch {
     adError.value = true;
@@ -841,6 +845,8 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .ad-form button { padding: 0.7rem; font-weight: 700; background: var(--green); color: #fff; border: none; border-radius: 10px; cursor: pointer; }
 .ad-form button:hover { background: var(--green-d); }
 .done { text-align: center; color: var(--green-d); font-weight: 700; }
+.done.limit { color: inherit; font-weight: 500; }
+.done.limit a, .done.limit .mail { color: var(--green-d); font-weight: 700; }
 .error { text-align: center; color: #dc2626; }
 .small { font-size: 0.78rem; }
 @media (max-width: 1250px) { .rail { display: none; } }

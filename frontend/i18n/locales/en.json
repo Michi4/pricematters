@@ -95,7 +95,7 @@
     "cta": "Request this spot",
     "infeed": "Your product could be right here.",
     "title": "Advertise on PriceMatters",
-    "text": "Sponsored slots — always clearly labeled as ads, never disguised as results. Everything is available right now.",
+    "text": "Sponsored slots — everything is available right now.",
     "name": "Name",
     "email": "Email",
     "message": "Message",
@@ -107,7 +107,9 @@
     "send": "Send request",
     "sending": "Sending …",
     "error": "Could not send – just email us at werbung@websters.at.",
-    "done": "Thanks! We'll get back to you shortly."
+    "done": "Thanks! We'll get back to you shortly.",
+    "limit": "You already sent a request today. For anything else, reach us directly: office@websters.at",
+    "err": "Sending failed. Please try again later or write to office@websters.at"
   },
   "footer": {
     "by": "A project by",

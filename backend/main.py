@@ -411,16 +411,21 @@ class Contact(BaseModel):
 @app.post("/contact")
 def contact(c: Contact, request: Request):
     """Ad-slot inquiry: Postgres if available, stdout log otherwise. Always honest ok-flag."""
-    # simple spam guard: same shared limiter style as /search, 3 per 10 min per IP
+    # spam guard: 1 message per IP per day — a real person never hits this,
+    # and the 429 tells them the honest fallback (email us directly)
     try:
         from cache import _redis
         r = _redis()
         if r is not None:
-            mk = f"{CACHE_VERSION}:ctl:{_client_ip(request)}:{int(time.time()) // 600}"
+            day = int(time.time()) // 86400
+            mk = f"{CACHE_VERSION}:ctl:{_client_ip(request)}:{day}"
             if r.incr(mk) == 1:
-                r.expire(mk, 660)
-            if int(r.get(mk) or 0) > 3:
-                return JSONResponse(status_code=429, content={"ok": False, "error": "rate_limited"})
+                r.expire(mk, 90000)  # 25h: survives the UTC rollover cleanly
+            if int(r.get(mk) or 0) > 1:
+                return JSONResponse(status_code=429, content={
+                    "ok": False, "error": "daily_limit",
+                    "contact": "office@websters.at",
+                })
     except Exception:
         pass
     if not (c.name.strip() or c.email.strip()) or not c.message.strip():
@@ -648,10 +653,18 @@ def stats(request: Request, days: int = Query(30)):
             out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)) FROM events
                 WHERE ms > 0 AND ts > now() - make_interval(days => %s) GROUP BY kind""", (days,))
             try:
-                out["adInquiries"] = rows("""SELECT name, email, slot, created_at::date::text
-                    FROM ad_inquiries ORDER BY created_at DESC LIMIT 25""")
+                out["adInquiries"] = rows("""SELECT name, email, slot,
+                    left(message, 500) AS message, created_at::text
+                    FROM ad_inquiries ORDER BY created_at DESC LIMIT 50""")
             except Exception:
                 out["adInquiries"] = []
+            # non-secret runtime facts for the admin system panel
+            out["system"] = {
+                "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
+                "smtpTo": os.getenv("SMTP_TO", "office@websters.at") if os.getenv("SMTP_USER") else None,
+                "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
+                "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
+            }
             return out
     except Exception as e:
         # log details server-side only; raw DB errors must not reach clients
