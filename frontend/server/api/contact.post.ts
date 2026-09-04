@@ -7,7 +7,9 @@ export default defineEventHandler(async (event) => {
       method: 'POST',
       body,
       headers: fwdClientIp(event),
+      ignoreResponseError: true,
     }) as any;
+    if (res?.error === 'daily_limit') return { ok: false, error: 'daily_limit' };
     return { ok: !!res?.ok };
   } catch {
     return { ok: false };
