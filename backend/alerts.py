@@ -100,6 +100,78 @@ def mock_fallback(marketplace: str):
          severity="crit", cooldown_s=3600)
 
 
+def inquiry_received(name: str, email: str, slot: str):
+    emit("inq",
+         f"New ad inquiry: {name} <{email}> ({slot or 'general'}). "
+         f"Also in your inbox + admin dashboard.",
+         severity="info", cooldown_s=60)
+
+
+def contact_limited():
+    emit("ctlim",
+         "Someone hit the 1/day contact-form limit (possible spam or a very "
+         "eager advertiser). Nothing stored, nothing to do.",
+         severity="info", cooldown_s=43200)
+
+
+# searched from small to large; alert only the highest newly-crossed rung
+_LADDER = [100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000,
+           250000, 500000, 1000000]
+
+
+def check_milestones():
+    """Called on each /alerts poll: celebrate total search/click milestones
+    and record traffic days. Self-contained DB access, never raises."""
+    import os
+    import psycopg
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        return
+    r = _redis()
+    if r is None:
+        return
+    with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM events WHERE kind='search'")
+        searches = int(cur.fetchone()[0])
+        cur.execute("SELECT COUNT(*) FROM events WHERE kind='click'")
+        clicks = int(cur.fetchone()[0])
+        cur.execute("""SELECT COUNT(*) FROM events WHERE kind='search'
+                       AND ts >= date_trunc('day', now())""")
+        today = int(cur.fetchone()[0])
+
+    def crossed(kind: str, total: int):
+        mk = f"{PFX}:ms:{kind}"
+        try:
+            seen = int(r.get(mk) or 0)
+        except Exception:
+            return
+        rungs = [x for x in _LADDER if x <= total and x > seen]
+        if rungs:
+            r.set(mk, rungs[-1])
+            emit(f"ms-{kind}-{rungs[-1]}",
+                 f"Milestone: {rungs[-1]}+ total {kind} on PriceMatters!",
+                 severity="info", cooldown_s=60)
+
+    crossed("searches", searches)
+    crossed("clicks", clicks)
+
+    # record day: quiet baseline on first ever run
+    rk = f"{PFX}:recday"
+    try:
+        best = int(r.get(rk) or 0)
+    except Exception:
+        best = 0
+    if best == 0:
+        if today >= 10:
+            r.set(rk, today)
+    elif today > best:
+        r.set(rk, today)
+        emit(f"recday-{today}",
+             f"Record day: {today} searches (previous best {best}). "
+             f"Something is resonating!",
+             severity="info", cooldown_s=3600)
+
+
 def usage_snapshot() -> list:
     """Per-key monthly usage for the admin System panel: [{index, used, quota}]."""
     r = _redis()

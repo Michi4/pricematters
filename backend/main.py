@@ -219,7 +219,8 @@ def get_alerts(request: Request):
     """
     if not _admin_ok(request):
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
-    from alerts import pending, usage_snapshot
+    from alerts import pending, usage_snapshot, check_milestones
+    check_milestones()
     items = pending()
     return {"alerts": items, "serpapiUsage": usage_snapshot()}
 
@@ -473,6 +474,11 @@ def contact(c: Contact, request: Request):
             if r.incr(mk) == 1:
                 r.expire(mk, 90000)  # 25h: survives the UTC rollover cleanly
             if int(r.get(mk) or 0) > 1:
+                try:
+                    from alerts import contact_limited
+                    contact_limited()
+                except Exception:
+                    pass
                 return JSONResponse(status_code=429, content={
                     "ok": False, "error": "daily_limit",
                     "contact": "office@websters.at",
@@ -481,6 +487,11 @@ def contact(c: Contact, request: Request):
         pass
     if not (c.name.strip() or c.email.strip()) or not c.message.strip():
         return JSONResponse(status_code=400, content={"ok": False, "error": "invalid"})
+    try:
+        from alerts import inquiry_received, contact_limited
+        inquiry_received(c.name, c.email, c.slot)
+    except Exception:
+        pass
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
