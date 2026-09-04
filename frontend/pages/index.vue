@@ -2,8 +2,12 @@
   <div class="page">
     <header class="top">
       <NuxtLink :to="localePath('/')" class="logo" @click="goHome">
-        <img src="/logo.svg" alt="logo" width="28" height="28" class="logo-light" />
-        <img src="/logo-dark.svg" alt="logo" width="28" height="28" class="logo-dark" />
+        <svg class="logo-svg" width="28" height="28" viewBox="0 0 64 64" role="img" aria-hidden="true">
+          <title>PriceMatters</title>
+          <rect class="lgA" x="10" y="8" width="12" height="48" rx="6" />
+          <path class="lgB" d="M10 14 Q10 8 16 8 H34 L56 22.5 L34 37 H10 Z" />
+          <circle class="lgC" cx="33" cy="22.5" r="6.5" />
+        </svg>
         <span>{{ brand.name }}</span>
       </NuxtLink>
       <div class="top-right">
@@ -799,10 +803,12 @@ html[data-theme="dark"] { scrollbar-color: #3a4c40 transparent; }
 .theme-btn:hover { border-color: var(--green); color: var(--green-d); }
 .lang a { text-decoration: none; color: var(--ink); font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem; border-radius: 6px; }
 .lang a.active { background: var(--green); color: #fff; }
-.logo-light { display: block; }
-.logo-dark { display: none; }
-[data-theme="dark"] .logo-light { display: none; }
-[data-theme="dark"] .logo-dark { display: block; }
+.logo-svg .lgA { fill: #1a2e1f; }
+.logo-svg .lgB { fill: #16a34a; }
+.logo-svg .lgC { fill: #fff; }
+[data-theme="dark"] .logo-svg .lgA { fill: #e9f1ea; }
+[data-theme="dark"] .logo-svg .lgB { fill: #22c55e; }
+[data-theme="dark"] .logo-svg .lgC { fill: #0d140f; }
 .layout { display: flex; justify-content: center; gap: 1.5rem; align-items: flex-start; flex: 1; width: 100%; }
 .layout main { flex: 1; width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; min-width: 0; }
 .rail { width: 170px; min-width: 170px; position: sticky; top: 50vh; transform: translateY(-50%); align-self: flex-start; display: flex; }

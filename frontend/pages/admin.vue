@@ -2,7 +2,12 @@
   <div class="adm" :class="{ dark: dark }">
     <header class="top">
       <NuxtLink :to="localePath('/')" class="logo">
-        <img src="/logo.svg" alt="logo" width="28" height="28" />
+        <svg width="28" height="28" viewBox="0 0 64 64" role="img" aria-hidden="true">
+          <title>PriceMatters</title>
+          <rect class="lgA" x="10" y="8" width="12" height="48" rx="6" />
+          <path class="lgB" d="M10 14 Q10 8 16 8 H34 L56 22.5 L34 37 H10 Z" />
+          <circle class="lgC" cx="33" cy="22.5" r="6.5" />
+        </svg>
         <span>{{ brandName }}</span>
       </NuxtLink>
       <span v-if="unlocked && lastRefresh" class="hint mut small">upd {{ lastRefresh }}</span>
@@ -432,6 +437,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 <style>
 .adm { font-family: system-ui, -apple-system, sans-serif; color: #1a2e1f; background: #f6faf7; min-height: 100vh; }
 .adm.dark { color: #dbe7dd; background: #0d140f; }
+.adm svg .lgA { fill: #1a2e1f; }
+.adm svg .lgB { fill: #16a34a; }
+.adm svg .lgC { fill: #fff; }
+.adm.dark svg .lgA { fill: #e9f1ea; }
+.adm.dark svg .lgB { fill: #22c55e; }
+.adm.dark svg .lgC { fill: #0d140f; }
 .adm .top { display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1.2rem; background: #fff; border-bottom: 1px solid #e3ece4; position: sticky; top: 0; z-index: 5; }
 .adm.dark .top { background: #121a14; border-bottom-color: #1f2b22; }
 .adm .top .hint { margin-left: auto; }
