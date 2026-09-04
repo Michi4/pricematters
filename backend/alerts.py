@@ -63,10 +63,12 @@ def _ym() -> str:
     return time.strftime("%Y%m", time.gmtime())
 
 
-def serpapi_key_failed(index: int, err: str):
+def serpapi_key_failed(index: int, err: str, query: str = "", marketplace: str = ""):
     """A SerpApi key hit a hard error (usually monthly quota)."""
+    ctx = f' (query "{query[:60]}", {marketplace})' if query else ""
     emit(f"serpkey{index}",
-         f"SerpApi key #{index + 1} failed: {err[:120]}. Rotating to the next key.",
+         f"SerpApi key #{index + 1} failed{ctx}: {err[:120]}. "
+         f"Rotating to the next key.",
          severity="warn", cooldown_s=43200)
 
 
@@ -138,6 +140,17 @@ def check_milestones():
         cur.execute("""SELECT COUNT(*) FROM events WHERE kind='search'
                        AND ts >= date_trunc('day', now())""")
         today = int(cur.fetchone()[0])
+        cur.execute("""SELECT COUNT(*) FROM events WHERE kind='search'
+                       AND ts >= now() - interval '1 hour'""")
+        last_hour = int(cur.fetchone()[0])
+        cur.execute("""
+            SELECT COALESCE(AVG(c), 0) FROM (
+              SELECT date_trunc('hour', ts) h, COUNT(*) c
+              FROM events
+              WHERE kind='search' AND ts < now() - interval '1 hour'
+                AND ts >= now() - interval '7 days'
+              GROUP BY 1) s""")
+        baseline = float(cur.fetchone()[0])
 
     def crossed(kind: str, total: int):
         mk = f"{PFX}:ms:{kind}"
@@ -170,6 +183,13 @@ def check_milestones():
              f"Record day: {today} searches (previous best {best}). "
              f"Something is resonating!",
              severity="info", cooldown_s=3600)
+
+    # traffic spike: far more searches in the last hour than the usual rate
+    if last_hour >= 15 and last_hour >= max(4 * baseline, baseline + 10):
+        emit(f"spike-{time.strftime('%Y%m%d%H')}",
+             f"Traffic spike: {last_hour} searches in the last hour "
+             f"(usual ≈{baseline:.0f}/h). Check the admin dashboard.",
+             severity="info", cooldown_s=10800)
 
 
 def usage_snapshot() -> list:

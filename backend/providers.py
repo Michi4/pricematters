@@ -231,46 +231,56 @@ def serpapi_search(query: str, marketplace: str, page: int = 1):
                             p.get("link", "") or f"https://{domain}/dp/{asin}",
                             "Amazon", p.get("thumbnail") or p.get("image")))
             if not out:
-                raise RuntimeError("serpapi returned 0 priced products.")
+                # a valid response with zero priced products is not a key
+                # problem — don't burn the remaining keys on it
+                last_err = "serpapi returned 0 priced products"
+                break
             serpapi_usage_check(i, _serpapi_used(r, i), _serpapi_quota())
             return out
         except Exception as e:
             last_err = str(e)
-            serpapi_key_failed(i, last_err)
+            serpapi_key_failed(i, last_err, query, marketplace)
             continue
     raise RuntimeError(last_err)
 
 
 def serpapi_product(asin: str, domain: str = "amazon.de"):
     """Single product by ASIN (SerpApi amazon_product engine). Defensive: {} on miss."""
-    key = os.getenv("SERPAPI_API_KEY", "")
-    if not key:
+    keys = _serpapi_keys()
+    if not keys:
         raise RuntimeError("SERPAPI_API_KEY not set")
-    data = _get("https://serpapi.com/search.json", {
-        "api_key": key, "engine": "amazon_product", "asin": asin,
-        "amazon_domain": domain,
-        "language": "de_DE" if domain == "amazon.de" else "en_US",
-    })
-    if data.get("error"):
-        raise RuntimeError(f"serpapi: {data['error']}")
-    pr = data.get("product_results", {}) or {}
-    title = pr.get("title", "")
-    price = pr.get("extracted_price", pr.get("price"))
-    if isinstance(price, dict):
-        price = price.get("extracted") or price.get("value") or price.get("raw")
-    image = pr.get("thumbnail") or (pr.get("thumbnails") or [None])[0]
-    rating = pr.get("rating")
-    try:
-        rating = float(str(rating).split()[0].replace(",", ".")) if rating else None
-    except (ValueError, IndexError):
-        rating = None
-    reviews = pr.get("reviews")
-    try:
-        reviews = int(str(reviews).replace(".", "").replace(",", "")) if reviews else None
-    except ValueError:
-        reviews = None
-    return {"title": title, "price_cents": _price_to_cents(price),
-            "image": image, "rating": rating, "reviews": reviews}
+    last_err = "no keys"
+    for key in keys:
+        try:
+            data = _get("https://serpapi.com/search.json", {
+                "api_key": key, "engine": "amazon_product", "asin": asin,
+                "amazon_domain": domain,
+                "language": "de_DE" if domain == "amazon.de" else "en_US",
+            })
+            if data.get("error"):
+                raise RuntimeError(f"serpapi: {data['error']}")
+            pr = data.get("product_results", {}) or {}
+            title = pr.get("title", "")
+            price = pr.get("extracted_price", pr.get("price"))
+            if isinstance(price, dict):
+                price = price.get("extracted") or price.get("value") or price.get("raw")
+            image = pr.get("thumbnail") or (pr.get("thumbnails") or [None])[0]
+            rating = pr.get("rating")
+            try:
+                rating = float(str(rating).split()[0].replace(",", ".")) if rating else None
+            except (ValueError, IndexError):
+                rating = None
+            reviews = pr.get("reviews")
+            try:
+                reviews = int(str(reviews).replace(".", "").replace(",", "")) if reviews else None
+            except ValueError:
+                reviews = None
+            return {"title": title, "price_cents": _price_to_cents(price),
+                    "image": image, "rating": rating, "reviews": reviews}
+        except Exception as e:
+            last_err = str(e)
+            continue
+    raise RuntimeError(last_err)
 
 
 def zenrows_search(query: str, marketplace: str, page: int = 1):
