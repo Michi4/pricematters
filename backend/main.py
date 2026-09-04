@@ -650,8 +650,23 @@ def stats(request: Request, days: int = Query(30)):
                     COUNT(DISTINCT ipd) FROM events
                     WHERE ts > now() - make_interval(days => %s)
                     GROUP BY 1 ORDER BY 2 DESC LIMIT 20""", (days,))
-            out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)) FROM events
-                WHERE ms > 0 AND ts > now() - make_interval(days => %s) GROUP BY kind""", (days,))
+            out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)),
+                COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ms)), 0)
+                FROM events WHERE ms > 0 AND ts > now() - make_interval(days => %s)
+                GROUP BY kind""", (days,))
+            # 48h activity, zero-filled so the chart never shows gaps
+            out["hourly"] = rows("""SELECT gs.h::text,
+                COUNT(e.kind) FILTER (WHERE e.kind = 'search'),
+                COUNT(e.kind) FILTER (WHERE e.kind = 'click')
+                FROM generate_series(date_trunc('hour', now()) - interval '47 hours',
+                                     date_trunc('hour', now()), interval '1 hour') AS gs(h)
+                LEFT JOIN events e ON date_trunc('hour', e.ts) = gs.h
+                GROUP BY 1 ORDER BY 1""")
+            out["clickStores"] = rows("""SELECT COALESCE(NULLIF(store, ''), '?'), COUNT(*)
+                FROM events WHERE kind='click' AND ts > now() - make_interval(days => %s)
+                GROUP BY 1 ORDER BY 2 DESC LIMIT 8""", (days,))
+            out["avgResults"] = rows("""SELECT ROUND(AVG(result_count)::numeric, 1)
+                FROM events WHERE kind='search' AND ts > now() - make_interval(days => %s)""", (days,))
             try:
                 out["adInquiries"] = rows("""SELECT name, email, slot,
                     left(message, 500) AS message, created_at::text
