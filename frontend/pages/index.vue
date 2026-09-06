@@ -970,11 +970,14 @@ footer { text-align: center; padding: 1.5rem 1rem 2rem; color: var(--mut); font-
 .disclosure { max-width: 640px; margin: 0 auto 0.5rem; }
 @media (max-width: 600px) {
   .hero h1 { font-size: 1.9rem; min-height: 3.4em; }
-  /* input + 2-letter code stay on one line; button goes full-width below */
+  /* input + 2-letter code stay on one line; button goes full-width below.
+     basis 0 (not auto): the input's intrinsic width would otherwise push
+     the AT chip onto its own row underneath */
   .search { flex-wrap: wrap; }
-  .search-field { flex: 1 1 auto; }
+  .search-field { flex: 1 1 0; }
   .search-field input { padding: 0.95rem 0.2rem; font-size: 1.1rem; }
   .market { flex: 0 0 auto; }
+  .market-btn { white-space: nowrap; }
   .market-list { right: 0; }
   .search > button { flex: 1 1 100%; margin: 0.35rem 0 0; padding: 0.95rem; }
 }
