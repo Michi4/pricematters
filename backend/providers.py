@@ -16,6 +16,7 @@ Feed shops (Awin & co):
 """
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 from selfscrape import selfscrape_search
@@ -67,11 +68,104 @@ def mock_search(query: str, marketplace: str):
     ]
 
 
-def _get(url: str, params: dict) -> dict:
+def _get(url: str, params: dict, timeout: float = TIMEOUT) -> dict:
     full = url + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(full, headers={"User-Agent": "pricematters/0.1"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
+
+
+# --- ScrapingBee free-trial management -------------------------------------
+# The trial has 1000 credits. While credits last, ScrapingBee is the primary
+# provider (per owner instruction); once it runs dry we stop burning requests
+# on a dead provider: after 3 consecutive failures the breaker opens and the
+# chain skips straight to serpapi. It self-heals after 1h in case credits
+# were refilled, and any successful call resets the failure count.
+def _sb_redis():
+    try:
+        from cache import _redis
+        return _redis()
+    except Exception:
+        return None
+
+
+SB_FAIL_KEY = "pm:v2:provider:scrapingbee:fails"
+SB_OPEN_KEY = "pm:v2:provider:scrapingbee:open_until"
+SB_FAIL_LIMIT = 3
+SB_BREAKER_COOLDOWN = 3600  # seconds
+
+
+def scrapingbee_breaker_open(r=None) -> bool:
+    try:
+        r = r or _sb_redis()
+        if r is None:
+            return False
+        until = r.get(SB_OPEN_KEY)
+        return bool(until and float(until) > time.time())
+    except Exception:
+        return False
+
+
+def _sb_record_failure(r):
+    try:
+        fails = r.incr(SB_FAIL_KEY)
+        r.expire(SB_FAIL_KEY, 86400)
+        if fails >= SB_FAIL_LIMIT:
+            r.set(SB_OPEN_KEY, time.time() + SB_BREAKER_COOLDOWN, ex=SB_BREAKER_COOLDOWN)
+            r.delete(SB_FAIL_KEY)
+            try:
+                from alerts import emit
+                emit("scrapingbee-out",
+                     "ScrapingBee failed 3x in a row — circuit breaker open for 1h, "
+                     "traffic moved to serpapi. If the free trial is exhausted, the "
+                     "next 1000 credits cost money: remove/replace the key or set "
+                     "DATA_PROVIDER=serpapi.",
+                     severity="warn", cooldown_s=86400)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _sb_record_success(r):
+    try:
+        r.delete(SB_FAIL_KEY)
+        r.delete(SB_OPEN_KEY)
+    except Exception:
+        pass
+
+
+def _sb_used(r) -> int:
+    try:
+        import time as _t
+        ym = _t.strftime("%Y%m", _t.gmtime())
+        return int(r.get(f"pm:v2:sbq:{ym}") or 0)
+    except Exception:
+        return 0
+
+
+def _sb_usage(r) -> dict:
+    """Best-effort ScrapingBee usage for the admin System panel."""
+    if r is None:
+        return {"used": 0, "quota": 0}
+    return {"used": _sb_used(r),
+            "quota": int(os.getenv("SCRAPINGBEE_QUOTA", "1000") or 1000)}
+
+
+def _sb_bump(r, n: int = 1):
+    """Local estimate of ScrapingBee credit spend (~1 credit per request on
+    standard plans; the API response doesn't echo credits left)."""
+    if r is None:
+        return
+    try:
+        import time as _t
+        ym = _t.strftime("%Y%m", _t.gmtime())
+        k = f"pm:v2:sbq:{ym}"
+        val = r.incrby(k, max(1, int(n)))
+        if val == n:
+            r.expire(k, 3360 * 3600)
+    except Exception:
+        pass
 
 
 def _get_redis():
@@ -143,13 +237,22 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
     key = os.getenv("SCRAPINGBEE_API_KEY", "")
     if not key:
         raise RuntimeError("SCRAPINGBEE_API_KEY not set")
+    r = _sb_redis()
+    if scrapingbee_breaker_open(r):
+        raise RuntimeError("scrapingbee skipped: circuit breaker open (recent failures)")
     domain = amz(marketplace)["domain"].replace("amazon.", "")
     # ScrapingBee rule: when country matches the amazon domain, send zip_code instead
-    data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
-        "api_key": key, "query": query, "domain": domain,
-        "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
-        "currency": amz(marketplace)["cur"], "pages": max(1, min(int(page), 3)),
-    })
+    try:
+        data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
+            "api_key": key, "query": query, "domain": domain,
+            "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
+            "currency": amz(marketplace)["cur"], "pages": max(1, min(int(page), 3)),
+        }, timeout=45)
+    except Exception as e:
+        _sb_record_failure(r)
+        raise RuntimeError(f"scrapingbee request failed: {type(e).__name__}") from e
+    _sb_record_success(r)
+    _sb_bump(r, max(1, min(int(page), 3)))
     out = []
     for p in data.get("search_results", data.get("results", [])):
         asin = p.get("asin", "")
@@ -361,3 +464,18 @@ ZONES = {"de": "Deutschland", "at": "Österreich", "ch": "Schweiz"}
 
 # cheapest-first default chain (free tiers before paid before experimental)
 DEFAULT_CHAIN = ["zenrows", "serpapi", "scrapingbee", "rainforest", "selfscrape", "mock"]
+
+
+def _effective_chain_env() -> str:
+    """The chain /search would actually use right now (same precedence as
+    main._effective_chain) — what the admin System panel displays."""
+    pinned = os.getenv("DATA_PROVIDER", "").strip()
+    env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
+    if pinned:
+        chain = [pinned] + [p for p in env_chain if p != pinned]
+    elif env_chain:
+        chain = env_chain
+    else:
+        chain = list(DEFAULT_CHAIN)
+    known = [c for c in chain if c in PROVIDERS]
+    return ",".join(known)

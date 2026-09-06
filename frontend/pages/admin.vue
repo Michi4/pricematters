@@ -94,11 +94,16 @@
             <h2>Top queries <input v-model="fq" class="tfilter" placeholder="filter…" /></h2>
             <table>
               <tbody>
-                <tr v-for="r in fTopQueries" :key="r[0]">
+                <tr v-for="r in pgTQ.view" :key="r[0]">
                   <td class="tt">{{ r[0] }}</td><td class="num">{{ r[1] }}</td>
                 </tr>
               </tbody>
             </table>
+            <div v-if="pgTQ.maxPage > 1" class="pager">
+              <button class="pgbtn" :disabled="pgTQ.page <= 1" @click="pgTQ.go(pgTQ.page - 1)">‹</button>
+              <span class="mut small">{{ pgTQ.page }}/{{ pgTQ.maxPage }}</span>
+              <button class="pgbtn" :disabled="pgTQ.page >= pgTQ.maxPage" @click="pgTQ.go(pgTQ.page + 1)">›</button>
+            </div>
             <p v-if="!fTopQueries.length" class="mut small">–</p>
           </section>
 
@@ -106,12 +111,17 @@
             <h2>Top clicked products <input v-model="fcl" class="tfilter" placeholder="filter…" /></h2>
             <table>
               <tbody>
-                <tr v-for="r in fTopClicks" :key="r[1]">
+                <tr v-for="r in pgTC.view" :key="r[1]">
                   <td class="tt">{{ r[0] }} <span class="mut small">· {{ r[2] }}</span></td>
                   <td class="num">{{ r[3] }}</td>
                 </tr>
               </tbody>
             </table>
+            <div v-if="pgTC.maxPage > 1" class="pager">
+              <button class="pgbtn" :disabled="pgTC.page <= 1" @click="pgTC.go(pgTC.page - 1)">‹</button>
+              <span class="mut small">{{ pgTC.page }}/{{ pgTC.maxPage }}</span>
+              <button class="pgbtn" :disabled="pgTC.page >= pgTC.maxPage" @click="pgTC.go(pgTC.page + 1)">›</button>
+            </div>
             <p v-if="!fTopClicks.length" class="mut small">–</p>
           </section>
         </div>
@@ -121,11 +131,16 @@
             <h2>CTR by query <input v-model="fctr" class="tfilter" placeholder="filter…" /></h2>
             <table>
               <tbody>
-                <tr v-for="r in fCtr" :key="r[0]">
+                <tr v-for="r in pgCTR.view" :key="r[0]">
                   <td class="tt">{{ r[0] }}</td><td class="num">{{ r[1] }}s → {{ r[2] }}c <b class="ctrr">{{ r[1] ? Math.round((r[2] / r[1]) * 100) : 0 }}%</b></td>
                 </tr>
               </tbody>
             </table>
+            <div v-if="pgCTR.maxPage > 1" class="pager">
+              <button class="pgbtn" :disabled="pgCTR.page <= 1" @click="pgCTR.go(pgCTR.page - 1)">‹</button>
+              <span class="mut small">{{ pgCTR.page }}/{{ pgCTR.maxPage }}</span>
+              <button class="pgbtn" :disabled="pgCTR.page >= pgCTR.maxPage" @click="pgCTR.go(pgCTR.page + 1)">›</button>
+            </div>
             <p v-if="!fCtr.length" class="mut small">–</p>
           </section>
 
@@ -133,11 +148,16 @@
             <h2>Zero-result queries</h2>
             <table>
               <tbody>
-                <tr v-for="r in data.zeroResults || []" :key="r[0]">
+                <tr v-for="r in pgZR.view" :key="r[0]">
                   <td class="tt">{{ r[0] }}</td><td class="num">{{ r[1] }}</td>
                 </tr>
               </tbody>
             </table>
+            <div v-if="pgZR.maxPage > 1" class="pager">
+              <button class="pgbtn" :disabled="pgZR.page <= 1" @click="pgZR.go(pgZR.page - 1)">‹</button>
+              <span class="mut small">{{ pgZR.page }}/{{ pgZR.maxPage }}</span>
+              <button class="pgbtn" :disabled="pgZR.page >= pgZR.maxPage" @click="pgZR.go(pgZR.page + 1)">›</button>
+            </div>
             <p v-if="!(data.zeroResults || []).length" class="mut small">none 🎉</p>
           </section>
         </div>
@@ -199,12 +219,18 @@
             <div><span class="dot ok"></span>Backend: reachable</div>
             <div>Search pages: {{ data.system?.pages ?? 2 }}</div>
             <div v-if="avgRes">ø results/search: {{ avgRes }}</div>
-            <div>Provider pinned: {{ data.system?.providerDefault || 'auto' }}</div>
+            <div>Provider pinned: {{ data.system?.providerDefault || 'auto' }}
+              <span v-if="data.system?.scrapingbeeBreaker" class="pill" title="ScrapingBee failed repeatedly — temporarily skipped, traffic on serpapi">SB breaker open</span>
+            </div>
+            <div v-if="data.system?.scrapingbeeUsage" :class="{ mut: !(data.system.scrapingbeeUsage.quota > 0) }">
+              ScrapingBee credits (est.): {{ data.system.scrapingbeeUsage.used }}/{{ data.system.scrapingbeeUsage.quota || '~1000 trial' }}
+              <span class="meter"><span class="fill" :class="{ warn: data.system.scrapingbeeUsage.used / data.system.scrapingbeeUsage.quota > 0.8, crit: data.system.scrapingbeeUsage.used / data.system.scrapingbeeUsage.quota > 0.95 }" :style="{ width: Math.min(100, (data.system.scrapingbeeUsage.used / (data.system.scrapingbeeUsage.quota || 1000)) * 100) + '%' }"></span></span>
+            </div>
             <div v-for="u in data.system?.serpapiUsage || []" :key="u.index" class="serpk">
               SerpApi key #{{ u.index }}: {{ u.used }}/{{ u.quota }}
               <span class="meter"><span class="fill" :class="{ warn: u.used / u.quota > 0.8, crit: u.used / u.quota > 0.95 }" :style="{ width: Math.min(100, (u.used / u.quota) * 100) + '%' }"></span></span>
             </div>
-            <div class="chain">Fallback chain: <span v-for="(p, i) in chainList" :key="p + i" class="pill" :class="{ first: i === 0 }">{{ p }}</span></div>
+            <div class="chain">Live chain: <span v-for="(p, i) in chainList" :key="p + i" class="pill" :class="{ first: i === 0 }">{{ p }}</span></div>
           </div>
         </section>
 
@@ -223,10 +249,10 @@
             <p v-if="openInq === ix" class="inq-msg">{{ inq[4] }}</p>
           </div>
           <p v-if="!(fInq || []).length" class="mut small">–</p>
-          <div v-if="(data.inqTotal || 0) > INQ_PER" class="pager">
+          <div v-if="inqPages > 1" class="pager">
             <button class="pgbtn" :disabled="inqPage <= 1" @click="gotoInq(inqPage - 1)">‹ prev</button>
-            <span class="mut small">page {{ inqPage }} / {{ Math.max(1, Math.ceil((data.inqTotal || 0) / INQ_PER)) }}</span>
-            <button class="pgbtn" :disabled="inqPage >= Math.ceil((data.inqTotal || 0) / INQ_PER)" @click="gotoInq(inqPage + 1)">next ›</button>
+            <span class="mut small">page {{ inqPage }} / {{ inqPages }}</span>
+            <button class="pgbtn" :disabled="inqPage >= inqPages" @click="gotoInq(inqPage + 1)">next ›</button>
           </div>
         </section>
 
@@ -265,8 +291,6 @@ const lastRefresh = ref('');
 const openInq = ref(-1);
 const days = ref(30);
 const hours = ref(48);
-const inqPage = ref(1);
-const INQ_PER = 20;
 const auto = ref(true);
 const dark = ref(false);
 const sel = ref(-1);
@@ -343,6 +367,28 @@ const fRefs = computed(() => (data.value?.refs || []).filter((r: any[]) => match
 const fInq = computed(() => (data.value?.adInquiries || []).filter((r: any[]) =>
   match(r, 1, finq.value) || match(r, 2, finq.value) || match(r, 3, finq.value) || match(r, 4, finq.value)));
 
+const INQ_PER = 20;
+const inqPage = ref(1);
+function gotoInq(p: number) { inqPage.value = p; openInq.value = -1; load(); }
+const inqPages = computed(() => Math.max(1, Math.ceil((data.value?.inqTotal ?? 0) / INQ_PER)));
+
+// client-side pagination for the aggregate tables (rows are capped server-side)
+function usePager(rows: () => any[], per = 10) {
+  const page = ref(1);
+  const maxPage = computed(() => Math.max(1, Math.ceil(rows().length / per)));
+  const view = computed(() => {
+    const p = Math.min(page.value, maxPage.value);
+    return rows().slice((p - 1) * per, p * per);
+  });
+  const shown = computed(() => Math.min(page.value, maxPage.value));
+  function go(p: number) { page.value = Math.min(Math.max(1, p), maxPage.value); }
+  return { page: shown, maxPage, view, go };
+}
+const pgTQ = usePager(() => fTopQueries.value);
+const pgTC = usePager(() => fTopClicks.value);
+const pgCTR = usePager(() => fCtr.value);
+const pgZR = usePager(() => (data.value?.zeroResults || []));
+
 function nice(v: any): string {
   const s = String(v ?? '');
   if (!s || s === '?') return 'unknown';
@@ -353,12 +399,6 @@ function fmtDate(s: any): string {
   const d = new Date(String(s));
   return isNaN(d.getTime()) ? String(s) : d.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
-function gotoInq(p: number) {
-  inqPage.value = p;
-  openInq.value = -1;
-  load();
-}
-
 function askDelete(id: number) {
   if (delSure.value !== id) {
     delSure.value = id;

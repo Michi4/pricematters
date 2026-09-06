@@ -296,6 +296,23 @@ def extract(title: str = Query(..., max_length=2000), description: str = Query("
     return {"qty": q.__dict__ if q else None}
 
 
+def _effective_chain() -> list:
+    """Runtime provider chain precedence: an explicit DATA_PROVIDER pin always
+    wins; DATA_PROVIDERS (if set) becomes its fallback tail; DEFAULT_CHAIN is
+    the last resort. Previously the env chain silently overrode the pin, so a
+    pinned provider never actually received traffic."""
+    from providers import DEFAULT_CHAIN as _dc, PROVIDERS
+    pinned = os.getenv("DATA_PROVIDER", "").strip()
+    env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
+    if pinned:
+        chain = [pinned] + [p for p in env_chain if p != pinned]
+    elif env_chain:
+        chain = env_chain
+    else:
+        chain = list(_dc)
+    return [c for c in chain if c in PROVIDERS]
+
+
 @app.get("/search")
 def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), marketplace: str = Query("de"),
            provider: str | None = Query(None), stores: str = Query("all"),
@@ -327,17 +344,7 @@ def search(request: Request, q: str = Query(..., max_length=MAX_QUERY_LEN), mark
     if single:
         chain = [single]
     else:
-        env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
-        if env_chain:
-            chain = env_chain
-        else:
-            # seamless fallback even when only DATA_PROVIDER is pinned:
-            # start there, then walk the rest of the default chain, mock last
-            from providers import DEFAULT_CHAIN as _dc
-            first = os.getenv("DATA_PROVIDER", "")
-            chain = ([first] if first in PROVIDERS else []) + [p for p in _dc if p != first and p != "mock"]
-            if "mock" in _dc:
-                chain.append("mock")
+        chain = _effective_chain()
     chain = [c for c in chain if c in PROVIDERS]
     if not chain:
         return {"items": [], "meta": {"chain": chain}, "error": "no known provider in chain"}
@@ -875,18 +882,29 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 out["inqTotal"] = 0
             # non-secret runtime facts for the admin system panel
             try:
-                from providers import DEFAULT_CHAIN as _dc
-                default_chain = ",".join(_dc)
-            except Exception:
-                default_chain = ""
-            out["system"] = {
-                "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
-                "smtpTo": os.getenv("SMTP_TO", "office@websters.at") if os.getenv("SMTP_USER") else None,
-                "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
-                "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
-                "providerChain": os.getenv("DATA_PROVIDERS", "") or default_chain,
-                "serpapiUsage": _serpapi_usage(),
-            }
+                from providers import _effective_chain_env, _sb_usage, _sb_redis, \
+                    scrapingbee_breaker_open
+                sb_r = _sb_redis()
+                out["system"] = {
+                    "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
+                    "smtpTo": os.getenv("SMTP_TO", "office@websters.at") if os.getenv("SMTP_USER") else None,
+                    "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
+                    "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
+                    "providerChain": _effective_chain_env(),
+                    "scrapingbeeUsage": _sb_usage(sb_r),
+                    "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r),
+                    "serpapiUsage": _serpapi_usage(),
+                }
+            except Exception as e:
+                print(f"[stats] system panel: {e}", flush=True)
+                out["system"] = {
+                    "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
+                    "smtpTo": os.getenv("SMTP_TO", "office@websters.at") if os.getenv("SMTP_USER") else None,
+                    "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
+                    "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
+                    "providerChain": os.getenv("DATA_PROVIDERS", ""),
+                    "serpapiUsage": _serpapi_usage(),
+                }
             return out
     except Exception as e:
         # log details server-side only; raw DB errors must not reach clients
