@@ -882,8 +882,8 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 out["inqTotal"] = 0
             # non-secret runtime facts for the admin system panel
             try:
-                from providers import _effective_chain_env, _sb_usage, _sb_redis, \
-                    scrapingbee_breaker_open
+                from providers import _effective_chain_env, scrapingbee_live_usage, \
+                    _sb_redis, scrapingbee_breaker_open
                 sb_r = _sb_redis()
                 out["system"] = {
                     "smtp": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS")),
@@ -891,7 +891,7 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                     "pages": max(1, min(3, int(os.getenv("SEARCH_PAGES", "2")))),
                     "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
                     "providerChain": _effective_chain_env(),
-                    "scrapingbeeUsage": _sb_usage(sb_r),
+                    "scrapingbeeUsage": scrapingbee_live_usage(),
                     "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r, os.getenv("SCRAPINGBEE_API_KEY", "")),
                     "serpapiUsage": _serpapi_usage(),
                 }

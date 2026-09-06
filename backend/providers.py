@@ -186,8 +186,8 @@ def _sb_usage(r) -> dict:
 
 
 def _sb_bump(r, n: int = 1):
-    """Local estimate of ScrapingBee credit spend (~1 credit per request on
-    standard plans; the API response doesn't echo credits left)."""
+    """Local estimate of ScrapingBee credit spend (~4 credits per page; only
+    used as fallback when the live usage endpoint is unreachable)."""
     if r is None:
         return
     try:
@@ -199,6 +199,26 @@ def _sb_bump(r, n: int = 1):
             r.expire(k, 3360 * 3600)
     except Exception:
         pass
+
+
+def scrapingbee_live_usage() -> dict:
+    """Real credit balance from ScrapingBee's usage endpoint (free, no credits
+    spent). Falls back to the local estimate if the endpoint is unreachable.
+    Shape: {used, quota, renewal, live}."""
+    key = os.getenv("SCRAPINGBEE_API_KEY", "")
+    if key:
+        try:
+            data = _get("https://app.scrapingbee.com/api/v1/usage",
+                        {"api_key": key}, timeout=6)
+            return {"used": int(data.get("used_api_credit", 0)),
+                    "quota": int(data.get("max_api_credit", 0)),
+                    "renewal": str(data.get("renewal_subscription_date", ""))[:10],
+                    "live": True}
+        except Exception:
+            pass
+    est = _sb_usage(_sb_redis())
+    est["live"] = False
+    return est
 
 
 def _get_redis():
@@ -295,7 +315,7 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
         _sb_record_failure(r)
         raise RuntimeError(f"scrapingbee request failed: {type(e).__name__}") from e
     _sb_record_success(r)
-    _sb_bump(r, int(os.getenv("SCRAPINGBEE_CREDIT_COST", "5")) * pages)
+    _sb_bump(r, int(os.getenv("SCRAPINGBEE_CREDIT_COST", "4")) * pages)
     out = []
     for p in data.get("products", data.get("search_results", data.get("results", []))):
         asin = p.get("asin", "")

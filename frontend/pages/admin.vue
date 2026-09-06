@@ -223,7 +223,7 @@
               <span v-if="data.system?.scrapingbeeBreaker" class="pill" title="ScrapingBee failed repeatedly — temporarily skipped, traffic on serpapi">SB breaker open</span>
             </div>
             <div v-if="data.system?.scrapingbeeUsage" :class="{ mut: !(data.system.scrapingbeeUsage.quota > 0) }">
-              ScrapingBee credits (est.): {{ data.system.scrapingbeeUsage.used }}/{{ data.system.scrapingbeeUsage.quota || '~1000 trial' }}
+              ScrapingBee credits{{ data.system.scrapingbeeUsage.live === false ? ' (est.)' : '' }}: {{ data.system.scrapingbeeUsage.used }}/{{ data.system.scrapingbeeUsage.quota || '~1000 trial' }}<template v-if="data.system.scrapingbeeUsage.renewal"> · renews {{ data.system.scrapingbeeUsage.renewal }}</template>
               <span class="meter"><span class="fill" :class="{ warn: data.system.scrapingbeeUsage.used / data.system.scrapingbeeUsage.quota > 0.8, crit: data.system.scrapingbeeUsage.used / data.system.scrapingbeeUsage.quota > 0.95 }" :style="{ width: Math.min(100, (data.system.scrapingbeeUsage.used / (data.system.scrapingbeeUsage.quota || 1000)) * 100) + '%' }"></span></span>
             </div>
             <div v-for="u in data.system?.serpapiUsage || []" :key="u.index" class="serpk">
