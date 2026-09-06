@@ -815,13 +815,19 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 COUNT(DISTINCT ipd) FROM events
                 WHERE ts > now() - make_interval(days => %s)
                 GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
-            out["topQueries"] = rows("""SELECT query, COUNT(*) FROM events
-                WHERE kind='search' AND ts > now() - make_interval(days => %s) AND query <> ''
-                GROUP BY query ORDER BY 2 DESC LIMIT 30""", (days,))
-            out["zeroResults"] = rows("""SELECT query, COUNT(*) FROM events
-                WHERE kind='search' AND ts > now() - make_interval(days => %s)
-                  AND COALESCE(result_count, 0) = 0 AND query <> ''
-                GROUP BY query ORDER BY 2 DESC LIMIT 20""", (days,))
+            # group case-insensitively ("Protein" vs "protein" is one query),
+            # displaying the most frequent casing variant
+            out["topQueries"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
+                FROM (SELECT query, COUNT(*) AS n FROM events
+                      WHERE kind='search' AND ts > now() - make_interval(days => %s) AND query <> ''
+                      GROUP BY query) t
+                GROUP BY LOWER(query) ORDER BY 2 DESC LIMIT 30""", (days,))
+            out["zeroResults"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
+                FROM (SELECT query, COUNT(*) AS n FROM events
+                      WHERE kind='search' AND ts > now() - make_interval(days => %s)
+                        AND COALESCE(result_count, 0) = 0 AND query <> ''
+                      GROUP BY query) t
+                GROUP BY LOWER(query) ORDER BY 2 DESC LIMIT 20""", (days,))
             # aggregate per ASIN: the same product was clicked with store=''
             # in some paths and 'Amazon' in others (and titles differ in
             # truncation) — grouping by title/store split it into phantom rows
@@ -833,12 +839,15 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 FROM events WHERE kind='click'
                 AND ts > now() - make_interval(days => %s)
                 GROUP BY asin ORDER BY 4 DESC LIMIT 30""", (days,))
-            out["ctrByQuery"] = rows("""SELECT query,
-                COUNT(*) FILTER (WHERE kind='search') AS searches,
-                COUNT(*) FILTER (WHERE kind='click') AS clicks
-                FROM events WHERE kind IN ('search','click')
-                AND ts > now() - make_interval(days => %s) AND query <> ''
-                GROUP BY query HAVING COUNT(*) FILTER (WHERE kind='search') > 0
+            out["ctrByQuery"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1],
+                SUM(searches) AS searches, SUM(clicks) AS clicks FROM (
+                  SELECT query,
+                      COUNT(*) FILTER (WHERE kind='search') AS searches,
+                      COUNT(*) FILTER (WHERE kind='click') AS clicks
+                  FROM events WHERE kind IN ('search','click')
+                  AND ts > now() - make_interval(days => %s) AND query <> ''
+                  GROUP BY query) t
+                GROUP BY LOWER(query) HAVING SUM(searches) > 0
                 ORDER BY 2 DESC LIMIT 25""", (days,))
             out["visitors"] = rows("""SELECT date_trunc('day', ts)::date::text,
                 COUNT(DISTINCT ipd) FROM events
@@ -861,11 +870,12 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                                      date_trunc('hour', now()), interval '1 hour') AS gs(h)
                 LEFT JOIN events e ON date_trunc('hour', e.ts) = gs.h
                 GROUP BY 1 ORDER BY 1""")
-            out["clickStores"] = rows("""SELECT COALESCE(NULLIF(store, ''), '?'), COUNT(*)
+            out["clickStores"] = rows("""SELECT COALESCE(NULLIF(store, ''), 'Amazon'), COUNT(*)
                 FROM events WHERE kind='click' AND ts > now() - make_interval(days => %s)
                 GROUP BY 1 ORDER BY 2 DESC LIMIT 8""", (days,))
             out["avgResults"] = rows("""SELECT ROUND(AVG(result_count)::numeric, 1)
-                FROM events WHERE kind='search' AND ts > now() - make_interval(days => %s)""", (days,))
+                FROM events WHERE kind='search' AND COALESCE(result_count, 0) >= 0
+                AND ts > now() - make_interval(days => %s)""", (days,))
             # paginated: /admin scales to thousands of inquiries without
             # shipping the whole table to the browser
             try:

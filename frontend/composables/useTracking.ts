@@ -32,28 +32,12 @@ export function useTracking() {
   onMounted(() => {
     if (trackedView.value === route.fullPath) return;
     trackedView.value = route.fullPath;
-    trackEvent('view', { ref: document.referrer || '' });
+    // clicks are tracked explicitly by the affiliate-link @click handlers
+    // (index.vue) — a global DOM listener would double-count every click
+    // and attribute it to the stale ?q= in the URL instead of the search
+    // that actually produced the clicked product
+    trackEvent('view', { ref: document.referrer || '', marketplace: String(route.query.marketplace || '') });
   });
-
-  // outbound affiliate clicks: capture before the tab navigates away
-  const onClick = (e: MouseEvent) => {
-    const a = (e.target as HTMLElement)?.closest?.('a[href]');
-    if (!a) return;
-    const href = (a as HTMLAnchorElement).href;
-    if (!/amazon\.[a-z.]+\/|\/dp\//.test(href)) return;
-    const card = a.closest('article');
-    const title = card?.querySelector('h2')?.textContent?.slice(0, 120) || '';
-    const price = card?.querySelector('.price')?.textContent || '';
-    trackEvent('click', {
-      asin: (href.match(/\/dp\/([A-Z0-9]{10})/i) || [])[1] || '',
-      title,
-      price_cents: Math.round(parseFloat(price.replace(',', '.')) * 100) || 0,
-      pos: [...(card?.parentElement?.children || [])].indexOf(card) + 1,
-      query: new URLSearchParams(window.location.search).get('q') || '',
-    });
-  };
-  onMounted(() => document.addEventListener('click', onClick));
-  onUnmounted(() => document.removeEventListener('click', onClick));
 
   return { trackEvent, t0 };
 }

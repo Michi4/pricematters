@@ -86,7 +86,7 @@
                 <span class="price">{{ money(f.price_cents) }}</span>
                 <span v-if="faveQtyLabel(f)" class="qty fave-unit">{{ faveQtyLabel(f) }}</span>
                 <span v-if="f.rating" class="qty">★ {{ f.rating }} ({{ f.reviews }})</span>
-                <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta cta-inline" :aria-label="`${t('results.atAmazon')}*: ${f.title.slice(0, 80)}`" @click="trackEvent('click', { asin: f.asin, store: 'Amazon', pos: fi, title: f.title, price_cents: f.price_cents, marketplace: marketplace })">{{ t('results.atAmazon') }}<span aria-hidden="true">*</span></a>
+                <a :href="f.url" target="_blank" rel="nofollow sponsored noopener" class="cta cta-inline" :aria-label="`${t('results.atAmazon')}*: ${f.title.slice(0, 80)}`" @click="trackEvent('click', { asin: f.asin, store: 'Amazon', pos: fi, title: f.title, price_cents: f.price_cents, marketplace: marketplace, query: q })">{{ t('results.atAmazon') }}<span aria-hidden="true">*</span></a>
               </div>
             </div>
           </div>
@@ -204,7 +204,7 @@
             <span v-if="shownUnit(r)" class="unitprice">
               <span v-if="shownInfo(r)?.approx" :title="t('results.approxHint')" class="approx">≈</span>{{ moneyBare(shownUnit(r)) }} {{ sym }} / {{ targetLabel(displayUnit) }}
             </span>
-            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta cta-inline" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}*: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace })">
+            <a :href="r.url" target="_blank" rel="nofollow sponsored noopener" class="cta cta-inline" :aria-label="`${(r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop'))}*: ${r.title.slice(0, 80)}`" @click="trackEvent('click', { asin: r.asin, store: r.store, pos: i + (page - 1) * perPage, title: r.title, price_cents: r.priceCents, marketplace: marketplace, query: q })">
               {{ r.store === 'Amazon' || !r.store ? t('results.atAmazon') : t('results.atShop') }}<span aria-hidden="true">*</span>
             </a>
           </div>
