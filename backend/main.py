@@ -785,7 +785,8 @@ def _serpapi_usage() -> list:
 
 
 @app.get("/stats")
-def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12, le=168)):
+def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12, le=168),
+          inq_page: int = Query(1, ge=1), inq_per: int = Query(20, ge=5, le=100)):
     """Admin-only aggregates for the /admin page."""
     if not _admin_ok(request):
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
@@ -814,10 +815,17 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 WHERE kind='search' AND ts > now() - make_interval(days => %s)
                   AND COALESCE(result_count, 0) = 0 AND query <> ''
                 GROUP BY query ORDER BY 2 DESC LIMIT 20""", (days,))
-            out["topClicks"] = rows("""SELECT COALESCE(NULLIF(title, ''), asin), asin, store,
-                COUNT(*) FROM events WHERE kind='click'
+            # aggregate per ASIN: the same product was clicked with store=''
+            # in some paths and 'Amazon' in others (and titles differ in
+            # truncation) — grouping by title/store split it into phantom rows
+            out["topClicks"] = rows("""SELECT COALESCE(NULLIF(
+                    (array_agg(title ORDER BY ts DESC))[1], ''), asin) AS title,
+                asin,
+                COALESCE(NULLIF(MAX(store), ''), 'Amazon') AS store,
+                COUNT(*)
+                FROM events WHERE kind='click'
                 AND ts > now() - make_interval(days => %s)
-                GROUP BY 1, 2, 3 ORDER BY 4 DESC LIMIT 30""", (days,))
+                GROUP BY asin ORDER BY 4 DESC LIMIT 30""", (days,))
             out["ctrByQuery"] = rows("""SELECT query,
                 COUNT(*) FILTER (WHERE kind='search') AS searches,
                 COUNT(*) FILTER (WHERE kind='click') AS clicks
@@ -851,13 +859,20 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 GROUP BY 1 ORDER BY 2 DESC LIMIT 8""", (days,))
             out["avgResults"] = rows("""SELECT ROUND(AVG(result_count)::numeric, 1)
                 FROM events WHERE kind='search' AND ts > now() - make_interval(days => %s)""", (days,))
+            # paginated: /admin scales to thousands of inquiries without
+            # shipping the whole table to the browser
             try:
-                out["adInquiries"] = rows("""SELECT id, name, email, slot,
+                cur.execute("SELECT COUNT(*) FROM ad_inquiries")
+                out["inqTotal"] = cur.fetchone()[0]
+                cur.execute("""SELECT id, name, email, slot,
                     left(message, 500) AS message, created_at::text,
                     COALESCE(ack, FALSE) AS ack
-                    FROM ad_inquiries ORDER BY created_at DESC LIMIT 50""")
+                    FROM ad_inquiries ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s""", (inq_per, (inq_page - 1) * inq_per))
+                out["adInquiries"] = cur.fetchall()
             except Exception:
                 out["adInquiries"] = []
+                out["inqTotal"] = 0
             # non-secret runtime facts for the admin system panel
             try:
                 from providers import DEFAULT_CHAIN as _dc

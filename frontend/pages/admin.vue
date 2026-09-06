@@ -218,11 +218,16 @@
               <span class="mut small inq-meta">{{ inq[3] || 'general' }} · {{ fmtDate(inq[5]) }}</span>
               <button class="ackbtn" :title="inq[6] ? 'mark as open again' : 'mark as resolved/read'" @click.stop="setAck(inq, !inq[6])">{{ inq[6] ? '✓' : '○' }}</button>
               <button class="delbtn" :class="{ sure: delSure === inq[0] }" :title="delSure === inq[0] ? 'click again to confirm' : 'delete'"
-                      @click.stop="askDelete(inq[0])">{{ delSure === inq[0] ? 'sure?' : '✕' }}</button>
+                      @click.stop="askDelete(inq[0])">{{ delSure === inq[0] ? 'click again' : '✕' }}</button>
             </div>
             <p v-if="openInq === ix" class="inq-msg">{{ inq[4] }}</p>
           </div>
           <p v-if="!(fInq || []).length" class="mut small">–</p>
+          <div v-if="(data.inqTotal || 0) > INQ_PER" class="pager">
+            <button class="pgbtn" :disabled="inqPage <= 1" @click="gotoInq(inqPage - 1)">‹ prev</button>
+            <span class="mut small">page {{ inqPage }} / {{ Math.max(1, Math.ceil((data.inqTotal || 0) / INQ_PER)) }}</span>
+            <button class="pgbtn" :disabled="inqPage >= Math.ceil((data.inqTotal || 0) / INQ_PER)" @click="gotoInq(inqPage + 1)">next ›</button>
+          </div>
         </section>
 
         <p class="mut small foot">
@@ -260,6 +265,8 @@ const lastRefresh = ref('');
 const openInq = ref(-1);
 const days = ref(30);
 const hours = ref(48);
+const inqPage = ref(1);
+const INQ_PER = 20;
 const auto = ref(true);
 const dark = ref(false);
 const sel = ref(-1);
@@ -310,7 +317,7 @@ const kpis = computed(() => {
     { label: 'CTR', value: ctr },
     { label: 'page views', value: views },
     { label: 'visitors today', value: todayVisitors },
-    { label: 'ad inquiries', value: d.adInquiries?.length || 0 },
+    { label: 'ad inquiries', value: d.inqTotal ?? d.adInquiries?.length ?? 0 },
   ];
 });
 
@@ -345,6 +352,11 @@ function fmtDate(s: any): string {
   if (!s) return '';
   const d = new Date(String(s));
   return isNaN(d.getTime()) ? String(s) : d.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function gotoInq(p: number) {
+  inqPage.value = p;
+  openInq.value = -1;
+  load();
 }
 
 function askDelete(id: number) {
@@ -381,7 +393,7 @@ let timer: any = null;
 async function load() {
   try {
     const res = await $fetch('/api/admin/stats', {
-      query: { days: days.value, hours: hours.value },
+      query: { days: days.value, hours: hours.value, inq_page: inqPage.value, inq_per: INQ_PER },
       headers: { 'x-admin-key': key.value },
     }) as any;
     if (res?.error === 'unauthorized') { wrong.value = true; unlocked.value = false; return; }
@@ -481,6 +493,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .small { font-size: 0.8rem; }
 .adm .tfilter { margin-left: auto; padding: 0.15rem 0.5rem; border: 1px solid #d5e2d7; border-radius: 8px; font-size: 0.8rem; background: #fff; color: inherit; max-width: 9rem; }
 .adm.dark .tfilter { background: #0d140f; border-color: #2a3b2f; }
+.adm .pager { display: flex; align-items: center; justify-content: center; gap: 0.8rem; margin-top: 0.7rem; }
+.adm .pgbtn { padding: 0.3rem 0.8rem; border: 1px solid #d5e2d7; border-radius: 8px; background: #fff; color: inherit; font-size: 0.8rem; cursor: pointer; }
+.adm .pgbtn:disabled { opacity: 0.4; cursor: default; }
+.adm.dark .pgbtn { background: #0d140f; border-color: #2a3b2f; }
 .adm .ctrr { color: #12813c; margin-left: 0.35rem; }
 .adm.dark .ctrr { color: #4ade80; }
 .adm .bars { display: flex; align-items: flex-end; gap: 2px; height: 120px; }
