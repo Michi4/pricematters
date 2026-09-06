@@ -839,7 +839,7 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 FROM events WHERE kind='click'
                 AND ts > now() - make_interval(days => %s)
                 GROUP BY asin ORDER BY 4 DESC LIMIT 30""", (days,))
-            out["ctrByQuery"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1],
+            out["ctrByQuery"] = rows("""SELECT (array_agg(query ORDER BY searches DESC, clicks DESC))[1],
                 SUM(searches) AS searches, SUM(clicks) AS clicks FROM (
                   SELECT query,
                       COUNT(*) FILTER (WHERE kind='search') AS searches,
