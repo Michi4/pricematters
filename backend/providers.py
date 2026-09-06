@@ -95,15 +95,48 @@ SB_FAIL_LIMIT = 3
 SB_BREAKER_COOLDOWN = 3600  # seconds
 
 
-def scrapingbee_breaker_open(r=None) -> bool:
+def _sb_auth_key(key: str) -> str:
+    """Auth breaker scoped to the key's fingerprint: replacing the key in .env
+    sidesteps the old breaker immediately instead of waiting out the cooldown."""
+    import hashlib
+    return f"pm:v2:provider:scrapingbee:auth:{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+
+
+def scrapingbee_breaker_open(r=None, key: str = "") -> bool:
     try:
         r = r or _sb_redis()
         if r is None:
             return False
         until = r.get(SB_OPEN_KEY)
-        return bool(until and float(until) > time.time())
+        if until and float(until) > time.time():
+            return True
+        if key:
+            until = r.get(_sb_auth_key(key))
+            if until and float(until) > time.time():
+                return True
+        return False
     except Exception:
         return False
+
+
+def _sb_record_auth_failure(r, key: str):
+    """401/403 = the key itself is dead (trial exhausted, revoked). No point
+    retrying: open the breaker for 6h right away and say why."""
+    try:
+        r.set(_sb_auth_key(key), time.time() + 6 * 3600, ex=6 * 3600)
+        r.delete(SB_FAIL_KEY)
+        try:
+            from alerts import emit
+            emit("scrapingbee-auth",
+                 "ScrapingBee rejected the API key (401/403) — free trial likely "
+                 "exhausted or key revoked. Traffic runs on serpapi until the key "
+                 "is fixed; check app.scrapingbee.com, then update "
+                 "SCRAPINGBEE_API_KEY and restart the backend.",
+                 severity="warn", cooldown_s=86400)
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 def _sb_record_failure(r):
@@ -238,7 +271,7 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
     if not key:
         raise RuntimeError("SCRAPINGBEE_API_KEY not set")
     r = _sb_redis()
-    if scrapingbee_breaker_open(r):
+    if scrapingbee_breaker_open(r, key):
         raise RuntimeError("scrapingbee skipped: circuit breaker open (recent failures)")
     domain = amz(marketplace)["domain"].replace("amazon.", "")
     # ScrapingBee rule: when country matches the amazon domain, send zip_code instead
@@ -248,6 +281,12 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
             "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
             "currency": amz(marketplace)["cur"], "pages": max(1, min(int(page), 3)),
         }, timeout=45)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            _sb_record_auth_failure(r, key)
+            raise RuntimeError(f"scrapingbee auth rejected (HTTP {e.code}) — key invalid") from e
+        _sb_record_failure(r)
+        raise RuntimeError(f"scrapingbee request failed: HTTP {e.code}") from e
     except Exception as e:
         _sb_record_failure(r)
         raise RuntimeError(f"scrapingbee request failed: {type(e).__name__}") from e

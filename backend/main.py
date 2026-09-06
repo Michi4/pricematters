@@ -892,7 +892,7 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                     "providerDefault": os.getenv("DATA_PROVIDER", "auto-chain"),
                     "providerChain": _effective_chain_env(),
                     "scrapingbeeUsage": _sb_usage(sb_r),
-                    "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r),
+                    "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r, os.getenv("SCRAPINGBEE_API_KEY", "")),
                     "serpapiUsage": _serpapi_usage(),
                 }
             except Exception as e:
