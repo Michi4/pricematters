@@ -373,6 +373,9 @@ function gotoInq(p: number) { inqPage.value = p; openInq.value = -1; load(); }
 const inqPages = computed(() => Math.max(1, Math.ceil((data.value?.inqTotal ?? 0) / INQ_PER)));
 
 // client-side pagination for the aggregate tables (rows are capped server-side)
+// NOTE: the returned object must be reactive() — a plain object's refs are NOT
+// unwrapped in templates, so pgX.view would be a ComputedRef and v-for would
+// iterate the ref itself (crash: "can't access property 0, s is undefined")
 function usePager(rows: () => any[], per = 10) {
   const page = ref(1);
   const maxPage = computed(() => Math.max(1, Math.ceil(rows().length / per)));
@@ -382,7 +385,7 @@ function usePager(rows: () => any[], per = 10) {
   });
   const shown = computed(() => Math.min(page.value, maxPage.value));
   function go(p: number) { page.value = Math.min(Math.max(1, p), maxPage.value); }
-  return { page: shown, maxPage, view, go };
+  return reactive({ page: shown, maxPage, view, go });
 }
 const pgTQ = usePager(() => fTopQueries.value);
 const pgTC = usePager(() => fTopClicks.value);

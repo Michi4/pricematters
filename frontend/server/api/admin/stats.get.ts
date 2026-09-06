@@ -4,7 +4,12 @@ export default defineEventHandler(async (event) => {
   const key = getQuery(event).key as string || getHeader(event, 'x-admin-key') || '';
   try {
     return await $fetch(`${config.backendUrl}/stats`, {
-      query: { days: getQuery(event).days || 30, hours: getQuery(event).hours || 48 },
+      query: {
+        days: getQuery(event).days || 30,
+        hours: getQuery(event).hours || 48,
+        inq_page: getQuery(event).inq_page || 1,
+        inq_per: getQuery(event).inq_per || 20,
+      },
       headers: { 'x-admin-key': key },
     });
   } catch (e: any) {
