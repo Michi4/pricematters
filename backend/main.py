@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 import time
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from affiliate import monetize, affiliate_url
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
@@ -703,22 +703,32 @@ def popular(request: Request, marketplace: str = Query("all"), lang: str = Query
 # ---------- anonymous first-party analytics (DSGVO-safe) ----------
 
 class Track(BaseModel):
-    kind: str = Field("", max_length=40)
-    query: str = Field("", max_length=180)
-    marketplace: str = Field("", max_length=40)
+    kind: str = ""
+    query: str = ""
+    marketplace: str = ""
     result_count: int = 0
-    country: str = Field("", max_length=16)
-    lang: str = Field("", max_length=32)
-    tz: str = Field("", max_length=64)
-    device: str = Field("", max_length=32)
+    country: str = ""
+    lang: str = ""
+    tz: str = ""
+    device: str = ""
     w: int = 0
-    asin: str = Field("", max_length=32)
-    store: str = Field("", max_length=40)
+    asin: str = ""
+    store: str = ""
     pos: int = 0
-    title: str = Field("", max_length=180)
+    title: str = ""
     price_cents: int = 0
     ms: int = 0
-    ref: str = Field("", max_length=180)
+    ref: str = ""
+
+    @field_validator("kind", "query", "marketplace", "country", "lang", "tz",
+                     "device", "asin", "store", "title", "ref", mode="before")
+    @classmethod
+    def _clip_str(cls, v):
+        # clip instead of reject: a max_length Field would 422 the whole
+        # event (long product titles / Accept-Language headers silently
+        # lost their click/view events otherwise); track() truncates to
+        # 180 again before the insert
+        return v[:256] if isinstance(v, str) else v
 
 
 @app.post("/track")
