@@ -266,7 +266,10 @@ def _price_to_cents(price) -> int | None:
 
 
 def scrapingbee_search(query: str, marketplace: str, page: int = 1):
-    """1000 credits free, no credit card. domain=de -> amazon.de prices."""
+    """ScrapingBee Amazon API: 5 credits per page fetched (trial = 1000 credits).
+    NOTE: the `language` param makes the endpoint 500 — omit it, the domain
+    already implies locale. Response shape: {"products": [...]} with flat
+    title/price/url_image fields."""
     key = os.getenv("SCRAPINGBEE_API_KEY", "")
     if not key:
         raise RuntimeError("SCRAPINGBEE_API_KEY not set")
@@ -274,12 +277,13 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
     if scrapingbee_breaker_open(r, key):
         raise RuntimeError("scrapingbee skipped: circuit breaker open (recent failures)")
     domain = amz(marketplace)["domain"].replace("amazon.", "")
-    # ScrapingBee rule: when country matches the amazon domain, send zip_code instead
+    pages = max(1, min(int(page), 3))
     try:
         data = _get("https://app.scrapingbee.com/api/v1/amazon/search", {
             "api_key": key, "query": query, "domain": domain,
-            "zip_code": amz(marketplace)["zip"], "language": "de" if domain == "de" else "en",
-            "currency": amz(marketplace)["cur"], "pages": max(1, min(int(page), 3)),
+            "zip_code": amz(marketplace)["zip"],
+            "currency": amz(marketplace)["cur"],
+            "start_page": pages, "pages": 1,
         }, timeout=45)
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
@@ -291,16 +295,23 @@ def scrapingbee_search(query: str, marketplace: str, page: int = 1):
         _sb_record_failure(r)
         raise RuntimeError(f"scrapingbee request failed: {type(e).__name__}") from e
     _sb_record_success(r)
-    _sb_bump(r, max(1, min(int(page), 3)))
+    _sb_bump(r, int(os.getenv("SCRAPINGBEE_CREDIT_COST", "5")) * pages)
     out = []
-    for p in data.get("search_results", data.get("results", [])):
+    for p in data.get("products", data.get("search_results", data.get("results", []))):
         asin = p.get("asin", "")
-        price = _price_to_cents((p.get("price") or {}).get("value", p.get("price")))
+        raw_price = p.get("price")
+        if isinstance(raw_price, dict):  # old shape {"value": ...}
+            raw_price = raw_price.get("value")
+        price = _price_to_cents(raw_price)
         if not asin or price is None:
             continue
-        out.append((asin, p.get("name") or p.get("title", ""), price,
-                    p.get("url") or p.get("link", ""), "Amazon",
-                    (p.get("image") or p.get("thumbnail")) or None))
+        url = p.get("url") or p.get("link") or ""
+        # sponsored rows carry /sspa/click tracking redirects — use the plain
+        # product page instead so links never rot with SB's click service
+        if "/sspa/" in url or not url:
+            url = f"https://{amz(marketplace)['domain']}/dp/{asin}"
+        out.append((asin, p.get("title") or p.get("name") or "", price, url, "Amazon",
+                    (p.get("url_image") or p.get("image") or p.get("thumbnail")) or None))
     return out
 
 
