@@ -37,7 +37,7 @@ DDL = """CREATE TABLE IF NOT EXISTS events (
   query TEXT, marketplace TEXT, result_count INT,
   ipd TEXT, country TEXT, lang TEXT, tz TEXT, device TEXT, w INT,
   asin TEXT, store TEXT, pos INT, title TEXT, price_cents INT,
-  ms INT, ref TEXT, owner INT DEFAULT 0)
+  ms INT, ref TEXT)
 """
 IDX = ["CREATE INDEX IF NOT EXISTS events_kind_ts ON events (kind, ts)",
        "CREATE INDEX IF NOT EXISTS events_ts ON events (ts)",
@@ -45,8 +45,7 @@ IDX = ["CREATE INDEX IF NOT EXISTS events_kind_ts ON events (kind, ts)",
 
 
 COLS = ["kind", "query", "marketplace", "result_count", "ipd", "country", "lang",
-        "tz", "device", "w", "asin", "store", "pos", "title", "price_cents", "ms", "ref",
-        "owner"]
+        "tz", "device", "w", "asin", "store", "pos", "title", "price_cents", "ms", "ref"]
 
 
 _ensured = False
@@ -62,7 +61,7 @@ def track(payload: dict) -> bool:
         p = {c: payload.get(c) for c in COLS}
         p = {k: (str(v)[:180] if v is not None else None) for k, v in p.items()}
         # numeric fields: client-supplied, unbounded ints would bloat events
-        for k in ("result_count", "w", "pos", "price_cents", "ms", "owner"):
+        for k in ("result_count", "w", "pos", "price_cents", "ms"):
             try:
                 p[k] = max(-10**6, min(10**6, int(p[k]))) if p[k] is not None else None
             except (TypeError, ValueError):
@@ -71,8 +70,6 @@ def track(payload: dict) -> bool:
             # schema is static — create it once per process, not on every event
             if not _ensured:
                 cur.execute(DDL)
-                # migrate pre-owner tables in place
-                cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS owner INT DEFAULT 0")
                 for stmt in IDX:
                     cur.execute(stmt)
                 _ensured = True

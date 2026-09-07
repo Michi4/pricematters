@@ -48,9 +48,6 @@
             </select>
           </label>
           <label class="mut small auto"><input v-model="auto" type="checkbox" /> auto 60s</label>
-          <label class="mut small auto" title="Hides marked browsers plus this and previously seen admin IPs — today and retroactively"><input v-model="excludeMe" type="checkbox" @change="saveExcludeMe" /> hide my visits</label>
-          <button v-if="!isOwner" class="pgbtn" @click="markOwner" title="Marks this browser permanently: all its future visits are excluded from stats on any IP">this browser is mine</button>
-          <span v-else class="mut small">✓ this browser is marked as yours · <button class="linklike" @click="unmarkOwner">unmark</button></span>
         </div>
 
         <div class="krow">
@@ -234,7 +231,6 @@
               <span class="meter"><span class="fill" :class="{ warn: u.used / u.quota > 0.8, crit: u.used / u.quota > 0.95 }" :style="{ width: Math.min(100, (u.used / u.quota) * 100) + '%' }"></span></span>
             </div>
             <div class="chain">Live chain: <span v-for="(p, i) in chainList" :key="p + i" class="pill" :class="{ first: i === 0 }">{{ p }}</span></div>
-            <div v-if="data.system?.myIp" :title="`Excluded from all panels while 'hide my visits' is on, along with ${data.system?.ownerHashes ?? 0} known owner hashes`">My IP: {{ data.system.myIp }}</div>
           </div>
         </section>
 
@@ -296,26 +292,6 @@ const openInq = ref(-1);
 const days = ref(30);
 const hours = ref(48);
 const auto = ref(true);
-// hide-my-visits toggle: on by default, remembered per browser
-const excludeMe = ref(true);
-try { if (localStorage.getItem('pm_admin_excludeme') === '0') excludeMe.value = false; } catch { /* private mode */ }
-function saveExcludeMe() {
-  try { localStorage.setItem('pm_admin_excludeme', excludeMe.value ? '1' : '0'); } catch { /* ignore */ }
-  load();
-}
-// owner marker: same-origin localStorage is shared with the main page, so
-// its beacons carry owner=1 from here on — excluded by "hide my visits"
-// permanently, on any IP or network
-const isOwner = ref(false);
-try { isOwner.value = localStorage.getItem('pm_owner') === '1'; } catch { /* private mode */ }
-function markOwner() {
-  try { localStorage.setItem('pm_owner', '1'); } catch { /* ignore */ }
-  isOwner.value = true;
-}
-function unmarkOwner() {
-  try { localStorage.removeItem('pm_owner'); } catch { /* ignore */ }
-  isOwner.value = false;
-}
 const dark = ref(false);
 const sel = ref(-1);
 const delSure = ref<number | null>(null);
@@ -460,8 +436,7 @@ let timer: any = null;
 async function load() {
   try {
     const res = await $fetch('/api/admin/stats', {
-      query: { days: days.value, hours: hours.value, inq_page: inqPage.value, inq_per: INQ_PER,
-               excludeme: excludeMe.value ? 1 : 0 },
+      query: { days: days.value, hours: hours.value, inq_page: inqPage.value, inq_per: INQ_PER },
       headers: { 'x-admin-key': key.value },
     }) as any;
     if (res?.error === 'unauthorized') { wrong.value = true; unlocked.value = false; return; }

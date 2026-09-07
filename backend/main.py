@@ -719,7 +719,6 @@ class Track(BaseModel):
     price_cents: int = 0
     ms: int = 0
     ref: str = ""
-    owner: int = 0
 
     @field_validator("kind", "query", "marketplace", "country", "lang", "tz",
                      "device", "asin", "store", "title", "ref", mode="before")
@@ -755,8 +754,7 @@ def track_event(t: Track, request: Request):
                 "result_count": t.result_count, "ipd": ip_hash(_client_ip(request)),
                 "country": t.country, "lang": t.lang, "tz": t.tz, "device": t.device,
                 "w": t.w, "asin": t.asin, "store": t.store, "pos": t.pos,
-                "title": t.title, "price_cents": t.price_cents, "ms": t.ms, "ref": t.ref,
-                "owner": t.owner})
+                "title": t.title, "price_cents": t.price_cents, "ms": t.ms, "ref": t.ref})
     return {"ok": ok}
 
 
@@ -805,57 +803,11 @@ def _serpapi_usage() -> list:
 
 @app.get("/stats")
 def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12, le=168),
-          inq_page: int = Query(1, ge=1), inq_per: int = Query(20, ge=5, le=100),
-          excludeme: int = Query(0)):
+          inq_page: int = Query(1, ge=1), inq_per: int = Query(20, ge=5, le=100)):
     """Admin-only aggregates for the /admin page."""
     if not _admin_ok(request):
         return JSONResponse(status_code=401, content={"error": "unauthorized"})
     days = max(1, min(days, 3650))  # 3650 ≈ all-time
-    # optional "hide my visits": the viewer's own events are identified by
-    # today's salted IP hash — same value track() stored for their beacons.
-    # Owner-IP learning: every authed admin view remembers today's owner
-    # hash, so the toggle also covers *unmarked* browsers on owner networks
-    # (phone, private window) — today and retroactively. Hashes are
-    # day-scoped, the set member carries the date; no raw IPs stored anywhere.
-    # (Marked browsers via admin "this browser is mine" are excluded for all
-    # time through owner=1 — IP matching alone is unreliable with dual-stack
-    # IPv4/IPv6 and rotating privacy-extension addresses.)
-    from track import ip_hash
-    mine = ip_hash(_client_ip(request))
-    OIP_KEY = f"{CACHE_VERSION}:owneripd"
-    today = time.strftime("%Y-%m-%d")
-    cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - max(1, min(days, 3650)) * 86400))
-    fresh_cut = time.strftime("%Y-%m-%d", time.localtime(time.time() - 120 * 86400))
-    learned: set = set()
-    try:
-        from cache import _redis
-        r = _redis()
-        if r is not None:
-            if mine:
-                r.sadd(OIP_KEY, f"{today}:{mine}")
-            raw = r.smembers(OIP_KEY)
-            keep = []
-            for m in raw:
-                s = m.decode() if isinstance(m, bytes) else m
-                d, _, h = s.partition(":")
-                if h and d >= cutoff:
-                    learned.add(h)
-                if d >= fresh_cut:
-                    keep.append(s)
-            if mine:
-                learned.add(mine)
-            if len(raw) > len(keep):
-                stale = [m for m in raw if (m.decode() if isinstance(m, bytes) else m) not in keep]
-                if stale:
-                    r.srem(OIP_KEY, *stale)
-    except Exception:
-        pass
-    if excludeme:
-        exc = "AND COALESCE(owner, 0) = 0 AND (ipd IS NULL OR NOT (ipd = ANY(%s)))"
-        xargs = (sorted(learned),)
-    else:
-        exc, xargs = ("", ())
-    excj = exc.replace("ipd", "e.ipd")  # hourly chart joins events as e
     try:
         import psycopg
         url = os.getenv("DATABASE_URL", "")
@@ -863,62 +815,62 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
             return {"error": "no database configured"}
         with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
             def rows(sql, args=()):
-                cur.execute(sql, args + xargs)
+                cur.execute(sql, args)
                 return cur.fetchall()
-            out: dict = {"days": days, "excludedMine": bool(excludeme)}
-            out["totals"] = rows(f"""SELECT kind, COUNT(*) FROM events
-                WHERE ts > now() - make_interval(days => %s) {exc} GROUP BY kind ORDER BY 2 DESC""", (days,))
-            out["daily"] = rows(f"""SELECT date_trunc('day', ts)::date::text,
+            out: dict = {"days": days}
+            out["totals"] = rows("""SELECT kind, COUNT(*) FROM events
+                WHERE ts > now() - make_interval(days => %s) GROUP BY kind ORDER BY 2 DESC""", (days,))
+            out["daily"] = rows("""SELECT date_trunc('day', ts)::date::text,
                 COUNT(*) FILTER (WHERE kind='search'), COUNT(*) FILTER (WHERE kind='click'),
                 COUNT(DISTINCT ipd) FROM events
-                WHERE ts > now() - make_interval(days => %s) {exc}
+                WHERE ts > now() - make_interval(days => %s)
                 GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
             # group case-insensitively ("Protein" vs "protein" is one query),
             # displaying the most frequent casing variant
-            out["topQueries"] = rows(f"""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
+            out["topQueries"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
                 FROM (SELECT query, COUNT(*) AS n FROM events
-                      WHERE kind='search' AND ts > now() - make_interval(days => %s) {exc} AND query <> ''
+                      WHERE kind='search' AND ts > now() - make_interval(days => %s) AND query <> ''
                       GROUP BY query) t
                 GROUP BY LOWER(query) ORDER BY 2 DESC LIMIT 30""", (days,))
-            out["zeroResults"] = rows(f"""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
+            out["zeroResults"] = rows("""SELECT (array_agg(query ORDER BY n DESC))[1], SUM(n)
                 FROM (SELECT query, COUNT(*) AS n FROM events
-                      WHERE kind='search' AND ts > now() - make_interval(days => %s) {exc}
+                      WHERE kind='search' AND ts > now() - make_interval(days => %s)
                         AND COALESCE(result_count, 0) = 0 AND query <> ''
                       GROUP BY query) t
                 GROUP BY LOWER(query) ORDER BY 2 DESC LIMIT 20""", (days,))
             # aggregate per ASIN: the same product was clicked with store=''
             # in some paths and 'Amazon' in others (and titles differ in
             # truncation) — grouping by title/store split it into phantom rows
-            out["topClicks"] = rows(f"""SELECT COALESCE(NULLIF(
+            out["topClicks"] = rows("""SELECT COALESCE(NULLIF(
                     (array_agg(title ORDER BY ts DESC))[1], ''), asin) AS title,
                 asin,
                 COALESCE(NULLIF(MAX(store), ''), 'Amazon') AS store,
                 COUNT(*)
                 FROM events WHERE kind='click'
-                AND ts > now() - make_interval(days => %s) {exc}
+                AND ts > now() - make_interval(days => %s)
                 GROUP BY asin ORDER BY 4 DESC LIMIT 30""", (days,))
-            out["ctrByQuery"] = rows(f"""SELECT (array_agg(query ORDER BY searches DESC, clicks DESC))[1],
+            out["ctrByQuery"] = rows("""SELECT (array_agg(query ORDER BY searches DESC, clicks DESC))[1],
                 SUM(searches) AS searches, SUM(clicks) AS clicks FROM (
                   SELECT query,
                       COUNT(*) FILTER (WHERE kind='search') AS searches,
                       COUNT(*) FILTER (WHERE kind='click') AS clicks
                   FROM events WHERE kind IN ('search','click')
-                  AND ts > now() - make_interval(days => %s) {exc} AND query <> ''
+                  AND ts > now() - make_interval(days => %s) AND query <> ''
                   GROUP BY query) t
                 GROUP BY LOWER(query) HAVING SUM(searches) > 0
                 ORDER BY 2 DESC LIMIT 25""", (days,))
-            out["visitors"] = rows(f"""SELECT date_trunc('day', ts)::date::text,
+            out["visitors"] = rows("""SELECT date_trunc('day', ts)::date::text,
                 COUNT(DISTINCT ipd) FROM events
-                WHERE ts > now() - make_interval(days => %s) {exc} GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
+                WHERE ts > now() - make_interval(days => %s) GROUP BY 1 ORDER BY 1 DESC LIMIT 60""", (days,))
             for name, col in [("markets", "marketplace"), ("langs", "lang"), ("tzs", "tz"),
                               ("devices", "device"), ("widths", "w"), ("refs", "ref")]:
                 out[name] = rows(f"""SELECT COALESCE(NULLIF({col}::text, ''), '?'), COUNT(*),
                     COUNT(DISTINCT ipd) FROM events
-                    WHERE ts > now() - make_interval(days => %s) {exc}
+                    WHERE ts > now() - make_interval(days => %s)
                     GROUP BY 1 ORDER BY 2 DESC LIMIT 20""", (days,))
-            out["avgMs"] = rows(f"""SELECT kind, ROUND(AVG(ms)),
+            out["avgMs"] = rows("""SELECT kind, ROUND(AVG(ms)),
                 COALESCE(ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ms)), 0)
-                FROM events WHERE ms > 0 AND ts > now() - make_interval(days => %s) {exc}
+                FROM events WHERE ms > 0 AND ts > now() - make_interval(days => %s)
                 GROUP BY kind""", (days,))
             # hourly activity, zero-filled so the chart never shows gaps
             out["hourly"] = rows(f"""SELECT gs.h::text,
@@ -926,14 +878,14 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 COUNT(e.kind) FILTER (WHERE e.kind = 'click')
                 FROM generate_series(date_trunc('hour', now()) - interval '{int(hours) - 1} hours',
                                      date_trunc('hour', now()), interval '1 hour') AS gs(h)
-                LEFT JOIN events e ON date_trunc('hour', e.ts) = gs.h {excj}
+                LEFT JOIN events e ON date_trunc('hour', e.ts) = gs.h
                 GROUP BY 1 ORDER BY 1""")
-            out["clickStores"] = rows(f"""SELECT COALESCE(NULLIF(store, ''), 'Amazon'), COUNT(*)
-                FROM events WHERE kind='click' AND ts > now() - make_interval(days => %s) {exc}
+            out["clickStores"] = rows("""SELECT COALESCE(NULLIF(store, ''), 'Amazon'), COUNT(*)
+                FROM events WHERE kind='click' AND ts > now() - make_interval(days => %s)
                 GROUP BY 1 ORDER BY 2 DESC LIMIT 8""", (days,))
-            out["avgResults"] = rows(f"""SELECT ROUND(AVG(result_count)::numeric, 1)
+            out["avgResults"] = rows("""SELECT ROUND(AVG(result_count)::numeric, 1)
                 FROM events WHERE kind='search' AND COALESCE(result_count, 0) >= 0
-                AND ts > now() - make_interval(days => %s) {exc}""", (days,))
+                AND ts > now() - make_interval(days => %s)""", (days,))
             # paginated: /admin scales to thousands of inquiries without
             # shipping the whole table to the browser
             try:
@@ -962,8 +914,6 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                     "scrapingbeeUsage": scrapingbee_live_usage(),
                     "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r, os.getenv("SCRAPINGBEE_API_KEY", "")),
                     "serpapiUsage": _serpapi_usage(),
-                    "myIp": _client_ip(request),
-                    "ownerHashes": len(learned),
                 }
             except Exception as e:
                 print(f"[stats] system panel: {e}", flush=True)
