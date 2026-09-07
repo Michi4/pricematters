@@ -48,7 +48,7 @@
             </select>
           </label>
           <label class="mut small auto"><input v-model="auto" type="checkbox" /> auto 60s</label>
-          <label class="mut small auto" title="Hides only today's visits from this device/IP — older hashes can't be linked (privacy design)"><input v-model="excludeMe" type="checkbox" @change="saveExcludeMe" /> hide my visits</label>
+          <label class="mut small auto" title="Hides marked browsers plus this and previously seen admin IPs — today and retroactively"><input v-model="excludeMe" type="checkbox" @change="saveExcludeMe" /> hide my visits</label>
           <button v-if="!isOwner" class="pgbtn" @click="markOwner" title="Marks this browser permanently: all its future visits are excluded from stats on any IP">this browser is mine</button>
           <span v-else class="mut small">✓ this browser is marked as yours · <button class="linklike" @click="unmarkOwner">unmark</button></span>
         </div>
@@ -234,6 +234,7 @@
               <span class="meter"><span class="fill" :class="{ warn: u.used / u.quota > 0.8, crit: u.used / u.quota > 0.95 }" :style="{ width: Math.min(100, (u.used / u.quota) * 100) + '%' }"></span></span>
             </div>
             <div class="chain">Live chain: <span v-for="(p, i) in chainList" :key="p + i" class="pill" :class="{ first: i === 0 }">{{ p }}</span></div>
+            <div v-if="data.system?.myIp" :title="`Excluded from all panels while 'hide my visits' is on, along with ${data.system?.ownerHashes ?? 0} known owner hashes`">My IP: {{ data.system.myIp }}</div>
           </div>
         </section>
 

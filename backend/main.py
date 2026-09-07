@@ -813,17 +813,46 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
     days = max(1, min(days, 3650))  # 3650 ≈ all-time
     # optional "hide my visits": the viewer's own events are identified by
     # today's salted IP hash — same value track() stored for their beacons.
-    # Daily rotation means only *today's* own visits can be excluded; older
-    # ones are unlinkable by design (privacy first).
+    # Owner-IP learning: every authed admin view remembers today's owner
+    # hash, so the toggle also covers *unmarked* browsers on owner networks
+    # (phone, private window) — today and retroactively. Hashes are
+    # day-scoped, the set member carries the date; no raw IPs stored anywhere.
+    # (Marked browsers via admin "this browser is mine" are excluded for all
+    # time through owner=1 — IP matching alone is unreliable with dual-stack
+    # IPv4/IPv6 and rotating privacy-extension addresses.)
     from track import ip_hash
-    mine = ip_hash(_client_ip(request)) if excludeme else ""
-    # owner-marked browsers (admin "this browser is mine") are excluded for
-    # all time — IP matching alone is unreliable (dual-stack IPv4/IPv6 and
-    # rotating privacy-extension addresses change the hash mid-day)
-    if excludeme and mine:
-        exc, xargs = ("AND ipd IS DISTINCT FROM %s AND COALESCE(owner, 0) = 0", (mine,))
-    elif excludeme:
-        exc, xargs = ("AND COALESCE(owner, 0) = 0", ())
+    mine = ip_hash(_client_ip(request))
+    OIP_KEY = f"{CACHE_VERSION}:owneripd"
+    today = time.strftime("%Y-%m-%d")
+    cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - max(1, min(days, 3650)) * 86400))
+    fresh_cut = time.strftime("%Y-%m-%d", time.localtime(time.time() - 120 * 86400))
+    learned: set = set()
+    try:
+        from cache import _redis
+        r = _redis()
+        if r is not None:
+            if mine:
+                r.sadd(OIP_KEY, f"{today}:{mine}")
+            raw = r.smembers(OIP_KEY)
+            keep = []
+            for m in raw:
+                s = m.decode() if isinstance(m, bytes) else m
+                d, _, h = s.partition(":")
+                if h and d >= cutoff:
+                    learned.add(h)
+                if d >= fresh_cut:
+                    keep.append(s)
+            if mine:
+                learned.add(mine)
+            if len(raw) > len(keep):
+                stale = [m for m in raw if (m.decode() if isinstance(m, bytes) else m) not in keep]
+                if stale:
+                    r.srem(OIP_KEY, *stale)
+    except Exception:
+        pass
+    if excludeme:
+        exc = "AND COALESCE(owner, 0) = 0 AND (ipd IS NULL OR NOT (ipd = ANY(%s)))"
+        xargs = (sorted(learned),)
     else:
         exc, xargs = ("", ())
     excj = exc.replace("ipd", "e.ipd")  # hourly chart joins events as e
@@ -933,6 +962,8 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                     "scrapingbeeUsage": scrapingbee_live_usage(),
                     "scrapingbeeBreaker": scrapingbee_breaker_open(sb_r, os.getenv("SCRAPINGBEE_API_KEY", "")),
                     "serpapiUsage": _serpapi_usage(),
+                    "myIp": _client_ip(request),
+                    "ownerHashes": len(learned),
                 }
             except Exception as e:
                 print(f"[stats] system panel: {e}", flush=True)
