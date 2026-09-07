@@ -121,7 +121,7 @@
           </span>
         </div>
 
-        <div v-if="sorted.length" class="toolbar">
+        <div v-if="sorted.length" ref="resultsTop" class="toolbar">
           <div class="segmented" role="group" :aria-label="t('results.sort.label')">
             <button :class="{ active: sortKey.startsWith('unit') }" @click="toggleSort('unit')">{{ t('results.sort.shortUnit') }}<span class="arr" aria-hidden="true">{{ sortArrow('unit') }}</span></button>
             <button :class="{ active: sortKey.startsWith('price') }" @click="toggleSort('price')">{{ t('results.sort.shortPrice') }}<span class="arr" aria-hidden="true">{{ sortArrow('price') }}</span></button>
@@ -218,9 +218,9 @@
         </template>
 
         <div v-if="totalPages > 1" class="pager">
-          <button :disabled="page <= 1" @click="page--">‹</button>
+          <button :disabled="page <= 1" @click="gotoPage(page - 1)">‹</button>
           <span>{{ t('results.pageOf', { p: page, n: totalPages }) }}</span>
-          <button :disabled="page >= totalPages" @click="page++">›</button>
+          <button :disabled="page >= totalPages" @click="gotoPage(page + 1)">›</button>
           <label>{{ t('results.perPage') }}
             <select v-model.number="perPage">
               <option :value="10">10</option>
@@ -489,6 +489,21 @@ watch(sizeUnitOptions, (opts) => {
   if (!opts.some((o) => o.id === sizeUnit.value)) sizeUnit.value = opts[0]?.id || 'kg';
 });
 const page = ref(1);
+// anchor above the first result card: paging must bring the user back to
+// the top of the list instead of leaving them at the bottom pager
+const resultsTop = ref<HTMLElement | null>(null);
+function scrollToResults() {
+  nextTick(() => {
+    try {
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      resultsTop.value?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    } catch { /* jsdom etc */ }
+  });
+}
+function gotoPage(n: number) {
+  page.value = n;
+  scrollToResults();
+}
 // perPage + view survive reloads (localStorage, guarded for SSR)
 const perPage = ref(10);
 const viewMode = ref<'list' | 'grid'>('list');
@@ -497,7 +512,7 @@ try {
   if ([10, 25, 50, 100].includes(pp)) perPage.value = pp;
   if (localStorage.getItem('pm_view') === 'grid') viewMode.value = 'grid';
 } catch { /* SSR / private mode */ }
-watch(perPage, (v) => { try { localStorage.setItem('pm_perpage', String(v)); } catch { /* ignore */ } });
+watch(perPage, (v) => { try { localStorage.setItem('pm_perpage', String(v)); } catch { /* ignore */ } page.value = 1; scrollToResults(); });
 watch(viewMode, (v) => { try { localStorage.setItem('pm_view', v); } catch { /* ignore */ } });
 const userTz = ref('');
 const shipHint = computed(() => {
