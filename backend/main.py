@@ -893,8 +893,8 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
                 FROM events WHERE kind='click' AND ts > now() - make_interval(days => %s) {exc}
                 GROUP BY 1 ORDER BY 2 DESC LIMIT 8""", (days,))
             out["avgResults"] = rows(f"""SELECT ROUND(AVG(result_count)::numeric, 1)
-                FROM events WHERE kind='search' AND COALESCE(result_count, 0) >= 0 {exc}
-                AND ts > now() - make_interval(days => %s)""", (days,))
+                FROM events WHERE kind='search' AND COALESCE(result_count, 0) >= 0
+                AND ts > now() - make_interval(days => %s) {exc}""", (days,))
             # paginated: /admin scales to thousands of inquiries without
             # shipping the whole table to the browser
             try:
