@@ -719,6 +719,7 @@ class Track(BaseModel):
     price_cents: int = 0
     ms: int = 0
     ref: str = ""
+    owner: int = 0
 
     @field_validator("kind", "query", "marketplace", "country", "lang", "tz",
                      "device", "asin", "store", "title", "ref", mode="before")
@@ -754,7 +755,8 @@ def track_event(t: Track, request: Request):
                 "result_count": t.result_count, "ipd": ip_hash(_client_ip(request)),
                 "country": t.country, "lang": t.lang, "tz": t.tz, "device": t.device,
                 "w": t.w, "asin": t.asin, "store": t.store, "pos": t.pos,
-                "title": t.title, "price_cents": t.price_cents, "ms": t.ms, "ref": t.ref})
+                "title": t.title, "price_cents": t.price_cents, "ms": t.ms, "ref": t.ref,
+                "owner": t.owner})
     return {"ok": ok}
 
 
@@ -815,7 +817,15 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
     # ones are unlinkable by design (privacy first).
     from track import ip_hash
     mine = ip_hash(_client_ip(request)) if excludeme else ""
-    exc, xargs = ("AND ipd IS DISTINCT FROM %s", (mine,)) if mine else ("", ())
+    # owner-marked browsers (admin "this browser is mine") are excluded for
+    # all time — IP matching alone is unreliable (dual-stack IPv4/IPv6 and
+    # rotating privacy-extension addresses change the hash mid-day)
+    if excludeme and mine:
+        exc, xargs = ("AND ipd IS DISTINCT FROM %s AND COALESCE(owner, 0) = 0", (mine,))
+    elif excludeme:
+        exc, xargs = ("AND COALESCE(owner, 0) = 0", ())
+    else:
+        exc, xargs = ("", ())
     excj = exc.replace("ipd", "e.ipd")  # hourly chart joins events as e
     try:
         import psycopg
@@ -826,7 +836,7 @@ def stats(request: Request, days: int = Query(30), hours: int = Query(48, ge=12,
             def rows(sql, args=()):
                 cur.execute(sql, args + xargs)
                 return cur.fetchall()
-            out: dict = {"days": days, "excludedMine": bool(mine)}
+            out: dict = {"days": days, "excludedMine": bool(excludeme)}
             out["totals"] = rows(f"""SELECT kind, COUNT(*) FROM events
                 WHERE ts > now() - make_interval(days => %s) {exc} GROUP BY kind ORDER BY 2 DESC""", (days,))
             out["daily"] = rows(f"""SELECT date_trunc('day', ts)::date::text,

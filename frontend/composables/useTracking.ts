@@ -12,12 +12,18 @@ function deviceKind(): string {
 
 export function trackEvent(kind: string, data: Record<string, unknown> = {}) {
   try {
+    // owner marker: set via /admin "this browser is mine" — lets the admin
+    // stats permanently exclude the owner's own testing traffic, regardless
+    // of IP changes (dual-stack/rotating addresses defeat IP matching)
+    let owner = 0;
+    try { owner = localStorage.getItem('pm_owner') === '1' ? 1 : 0; } catch { /* SSR */ }
     const payload = {
       kind,
       lang: navigator.language || '',
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       device: deviceKind(),
       w: window.innerWidth,
+      owner,
       ...data,
     };
     return $fetch('/api/track', { method: 'POST', body: payload }).catch(() => null);

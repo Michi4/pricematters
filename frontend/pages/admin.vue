@@ -49,6 +49,8 @@
           </label>
           <label class="mut small auto"><input v-model="auto" type="checkbox" /> auto 60s</label>
           <label class="mut small auto" title="Hides only today's visits from this device/IP — older hashes can't be linked (privacy design)"><input v-model="excludeMe" type="checkbox" @change="saveExcludeMe" /> hide my visits</label>
+          <button v-if="!isOwner" class="pgbtn" @click="markOwner" title="Marks this browser permanently: all its future visits are excluded from stats on any IP">this browser is mine</button>
+          <span v-else class="mut small">✓ this browser is marked as yours · <button class="linklike" @click="unmarkOwner">unmark</button></span>
         </div>
 
         <div class="krow">
@@ -299,6 +301,19 @@ try { if (localStorage.getItem('pm_admin_excludeme') === '0') excludeMe.value = 
 function saveExcludeMe() {
   try { localStorage.setItem('pm_admin_excludeme', excludeMe.value ? '1' : '0'); } catch { /* ignore */ }
   load();
+}
+// owner marker: same-origin localStorage is shared with the main page, so
+// its beacons carry owner=1 from here on — excluded by "hide my visits"
+// permanently, on any IP or network
+const isOwner = ref(false);
+try { isOwner.value = localStorage.getItem('pm_owner') === '1'; } catch { /* private mode */ }
+function markOwner() {
+  try { localStorage.setItem('pm_owner', '1'); } catch { /* ignore */ }
+  isOwner.value = true;
+}
+function unmarkOwner() {
+  try { localStorage.removeItem('pm_owner'); } catch { /* ignore */ }
+  isOwner.value = false;
 }
 const dark = ref(false);
 const sel = ref(-1);
