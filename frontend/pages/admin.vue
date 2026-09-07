@@ -48,6 +48,7 @@
             </select>
           </label>
           <label class="mut small auto"><input v-model="auto" type="checkbox" /> auto 60s</label>
+          <label class="mut small auto" title="Hides only today's visits from this device/IP — older hashes can't be linked (privacy design)"><input v-model="excludeMe" type="checkbox" @change="saveExcludeMe" /> hide my visits</label>
         </div>
 
         <div class="krow">
@@ -292,6 +293,13 @@ const openInq = ref(-1);
 const days = ref(30);
 const hours = ref(48);
 const auto = ref(true);
+// hide-my-visits toggle: on by default, remembered per browser
+const excludeMe = ref(true);
+try { if (localStorage.getItem('pm_admin_excludeme') === '0') excludeMe.value = false; } catch { /* private mode */ }
+function saveExcludeMe() {
+  try { localStorage.setItem('pm_admin_excludeme', excludeMe.value ? '1' : '0'); } catch { /* ignore */ }
+  load();
+}
 const dark = ref(false);
 const sel = ref(-1);
 const delSure = ref<number | null>(null);
@@ -436,7 +444,8 @@ let timer: any = null;
 async function load() {
   try {
     const res = await $fetch('/api/admin/stats', {
-      query: { days: days.value, hours: hours.value, inq_page: inqPage.value, inq_per: INQ_PER },
+      query: { days: days.value, hours: hours.value, inq_page: inqPage.value, inq_per: INQ_PER,
+               excludeme: excludeMe.value ? 1 : 0 },
       headers: { 'x-admin-key': key.value },
     }) as any;
     if (res?.error === 'unauthorized') { wrong.value = true; unlocked.value = false; return; }
