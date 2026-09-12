@@ -15,13 +15,12 @@ import time
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from affiliate import monetize, affiliate_url
+from affiliate import monetize, affiliate_url, tag_for  # Partner IDs via affiliate.TAG_ENVS env vars
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
 from translate import query_variants
 
 app = FastAPI(title="PriceMatters API")
-DEFAULT_TAG = "websters02-21"
 # cache stores RAW rows; qty/unit-price are re-enriched per request, so extractor
 # fixes apply to cached data without bumping this. Bump only for provider-param changes.
 CACHE_VERSION = "v2"
@@ -126,7 +125,7 @@ def enrich(pid: str, title: str, price_cents: int, url: str, shop: str, image: s
         "asin": pid,
         "title": title,
         "priceCents": price_cents,
-        "url": monetize(url, shop, marketplace, os.getenv("AMAZON_PARTNER_TAG", DEFAULT_TAG)),
+        "url": monetize(url, shop, marketplace, tag_for(marketplace)),
         "store": shop,
         "image": image,
         "qty": {"value": q.value, "unit": q.unit, "kind": q.kind} if q else None,
@@ -487,7 +486,7 @@ def curated(marketplace: str = Query("de")):
                 cache_store(key, data, f"{c['asin']}:{data['price_cents']}")
             except RuntimeError:
                 data = {**c, "image": None, "live": False}
-        tag = os.getenv("AMAZON_PARTNER_TAG", DEFAULT_TAG)
+        tag = tag_for(marketplace)
         from affiliate import MARKETPLACES
         domain = MARKETPLACES.get(marketplace, "www.amazon.de")
         items.append({**data, "asin": c["asin"], "store": "Amazon",

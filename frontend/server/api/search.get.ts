@@ -9,7 +9,15 @@ export default defineEventHandler(async (event) => {
   const marketplace = ((query.marketplace as string) || 'de').trim();
   if (!q) return { items: [], meta: {} };
   const config = useRuntimeConfig();
-  const tag = config.public.affiliateTag || 'websters02-21';
+  // per-program Partner IDs ("de:ID,uk:ID,fr:ID,es:ID,it:ID"); DACH shares de.
+  // backend already tags everything — this only fills gaps (e.g. dev mock).
+  const tagMap = Object.fromEntries(
+    String(config.public.affiliateTags || '').split(',')
+      .map((p: string) => p.split(':').map((s: string) => s.trim()))
+      .filter((p: string[]) => p.length === 2 && p[0] && p[1]));
+  const mpKey = marketplace === 'at' || marketplace === 'ch' ? 'de'
+    : marketplace === 'co.uk' ? 'uk' : marketplace;
+  const tag = tagMap[mpKey] || config.public.affiliateTag || '';
 
   try {
     const backend = await $fetch(`${config.backendUrl}/search`, {
@@ -22,7 +30,8 @@ export default defineEventHandler(async (event) => {
       items: (backend.items || []).map((it: any) => ({
         ...it,
         // backend already tags Amazon/Awin links; only add ours if missing
-        url: /[?&]tag=/.test(it.url) || !it.url.includes('amazon.')
+        // (and only where we have a program ID — never a dead ?tag=)
+        url: /[?&]tag=/.test(it.url) || !it.url.includes('amazon.') || !tag
           ? it.url
           : `${it.url}${it.url.includes('?') ? '&' : '?'}tag=${tag}`,
       })),
@@ -39,7 +48,7 @@ export default defineEventHandler(async (event) => {
     return {
       items: mocks.map((m) => {
         const qty = extractQuantity(m.title);
-        return { ...m, qty, unitPrice: qty ? unitPrice(m.priceCents, qty) : null, url: `${m.url}?tag=${tag}` };
+        return { ...m, qty, unitPrice: qty ? unitPrice(m.priceCents, qty) : null, url: tag ? `${m.url}?tag=${tag}` : m.url };
       }),
       meta: { demo: true, queries: [q] },
     };

@@ -60,6 +60,7 @@ export default defineNuxtConfig({
     public: {
       defaultLocale: process.env.NUXT_PUBLIC_DEFAULT_LOCALE || 'de-AT',
       affiliateTag: process.env.NUXT_PUBLIC_AFFILIATE_TAG || '',
+      affiliateTags: process.env.NUXT_PUBLIC_AFFILIATE_TAGS || '',
       canonicalHost: process.env.NUXT_PUBLIC_CANONICAL_HOST || 'pricematters.websters.at',
     },
   },

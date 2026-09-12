@@ -1,12 +1,16 @@
 """Affiliate link builder — the important insight:
 
 Commission does NOT need any API approval. Your PartnerNet PartnerTag
-(e.g. websters02-21) in the URL is enough for the 24h cookie + commission.
+in the URL is enough for the 24h cookie + commission.
 Only *product data* (titles/prices via API) needs Creators API approval.
 
 Same for other shops: Awin deeplinks just wrap the merchant URL, no API call.
 So: build links via this script from day 1, get data from mock/free-tier
 providers/feeds, swap the data source later without touching a single link.
+
+Each Amazon EU program issues its own Partner ID — tags are resolved per
+marketplace via tag_for() (DACH shares the .de ID, all shop on amazon.de).
+Locales without a program ID get plain links (no dead ?tag= param).
 """
 import urllib.parse
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
@@ -42,6 +46,11 @@ MARKETPLACES = {
 def affiliate_url(url_or_asin: str, tag: str, marketplace: str = "de") -> str:
     domain = MARKETPLACES.get(marketplace, MARKETPLACES["de"])
     value = url_or_asin.strip()
+    # no program ID for this locale -> plain link, never a dead ?tag=
+    if not tag:
+        if len(value) == 10 and "/" not in value:
+            return f"https://{domain}/dp/{value}"
+        return value if "://" in value else f"https://{domain}/{value.lstrip('/')}"
     # pure ASIN -> canonical dp URL
     if len(value) == 10 and "/" not in value:
         return f"https://{domain}/dp/{value}?tag={tag}"
@@ -50,6 +59,27 @@ def affiliate_url(url_or_asin: str, tag: str, marketplace: str = "de") -> str:
     q = dict(parse_qsl(parts.query))
     q["tag"] = tag
     return urlunparse((parts.scheme, parts.netloc or domain, parts.path, "", urlencode(q), ""))
+
+
+# PartnerNet IDs are per EU program (one signup each, no re-entry).
+# DACH shares the .de ID — Austria & Switzerland shop on amazon.de.
+TAG_ENVS = {
+    "de": "AMAZON_TAG_DE", "at": "AMAZON_TAG_DE", "ch": "AMAZON_TAG_DE",
+    "co.uk": "AMAZON_TAG_UK", "fr": "AMAZON_TAG_FR",
+    "es": "AMAZON_TAG_ES", "it": "AMAZON_TAG_IT",
+}
+
+
+def tag_for(marketplace: str) -> str:
+    """Partner ID for a marketplace, or '' when we have no program there."""
+    import os
+    env = TAG_ENVS.get(marketplace)
+    if env and os.getenv(env):
+        return os.getenv(env)
+    # legacy single-tag fallback, only for locales that have a program slot
+    if env:
+        return os.getenv("AMAZON_PARTNER_TAG", "")
+    return ""
 
 
 def awin_deeplink(merchant_url: str, advertiser_id: str, publisher_id: str) -> str:
