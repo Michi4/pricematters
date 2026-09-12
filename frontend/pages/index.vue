@@ -380,6 +380,9 @@ function guessMarketplace(): string {
     if (CODES.includes(forced)) return forced;
     const saved = readCookie('pm_market');
     if (CODES.includes(saved)) return saved;
+    // clamp to affiliate locales: tz/lang guesses outside MARKETS (fr, com,
+    // co.uk, …) fall back to de instead of selecting a non-earning storefront
+    const pick = (c: string) => (CODES.includes(c) ? c : 'de');
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
     const city = (tz.split('/')[1] || '').toLowerCase();
     const cityMap: Record<string, string> = {
@@ -387,14 +390,14 @@ function guessMarketplace(): string {
       madrid: 'es', rome: 'it', amsterdam: 'nl', stockholm: 'se', warsaw: 'pl',
       brussels: 'be', dublin: 'ie', tokyo: 'co.jp',
     };
-    if (cityMap[city]) return cityMap[city];
-    if (/^America\//i.test(tz)) return 'com';
+    if (cityMap[city]) return pick(cityMap[city]);
+    if (/^America\//i.test(tz)) return pick('com');
     const l = navigator.language || '';
     if (/^de-AT/i.test(l)) return 'at';
     if (/^de/i.test(l)) return 'de';
-    if (/^en-GB/i.test(l)) return 'co.uk';
-    if (/^fr/i.test(l)) return 'fr';
-    if (/^en/i.test(l)) return 'com';
+    if (/^en-GB/i.test(l)) return pick('co.uk');
+    if (/^fr/i.test(l)) return pick('fr');
+    if (/^en/i.test(l)) return pick('com');
   } catch { /* SSR: default */ }
   return 'de';
 }
@@ -412,7 +415,7 @@ let typeTimer: ReturnType<typeof setTimeout> | null = null;
 const marketGroups = computed(() => [
   { label: t('results.groups.eu'), items: MARKETS.filter((x) => x.group === 'eu') },
   { label: t('results.groups.world'), items: MARKETS.filter((x) => x.group === 'world') },
-]);
+].filter((g) => g.items.length));
 const currentCC = computed(() => MARKETS.find((x) => x.code === marketplace.value)?.cc || 'DE');
 const flatMarkets = computed(() => marketGroups.value.flatMap((g) => g.items));
 function pickMarket(code: string) {
@@ -569,29 +572,13 @@ const popularApi = ref<string[]>([]);
 // real user searches only — no placeholders; empty until the backend has data
 const popular = computed(() => popularApi.value);
 const MARKETS = [
+  // affiliate-only locales: we earn commission here (DACH all shops on
+  // amazon.de with the .de Partner ID). Re-add a locale the day its own
+  // PartnerNet program ID lands — groups/guesser/currency adapt on their own.
   { code: 'de', cc: 'DE', domain: 'amazon.de', group: 'eu' },
   { code: 'at', cc: 'AT', domain: 'amazon.de', group: 'eu' },
   { code: 'ch', cc: 'CH', domain: 'amazon.de', group: 'eu' },
-  { code: 'fr', cc: 'FR', domain: 'amazon.fr', group: 'eu' },
-  { code: 'it', cc: 'IT', domain: 'amazon.it', group: 'eu' },
   { code: 'es', cc: 'ES', domain: 'amazon.es', group: 'eu' },
-  { code: 'nl', cc: 'NL', domain: 'amazon.nl', group: 'eu' },
-  { code: 'se', cc: 'SE', domain: 'amazon.se', group: 'eu' },
-  { code: 'pl', cc: 'PL', domain: 'amazon.pl', group: 'eu' },
-  { code: 'be', cc: 'BE', domain: 'amazon.com.be', group: 'eu' },
-  { code: 'co.uk', cc: 'GB', domain: 'amazon.co.uk', group: 'eu' },
-  { code: 'ie', cc: 'IE', domain: 'amazon.ie', group: 'eu' },
-  { code: 'com', cc: 'US', domain: 'amazon.com', group: 'world' },
-  { code: 'ca', cc: 'CA', domain: 'amazon.ca', group: 'world' },
-  { code: 'com.mx', cc: 'MX', domain: 'amazon.com.mx', group: 'world' },
-  { code: 'com.br', cc: 'BR', domain: 'amazon.com.br', group: 'world' },
-  { code: 'com.au', cc: 'AU', domain: 'amazon.com.au', group: 'world' },
-  { code: 'co.jp', cc: 'JP', domain: 'amazon.co.jp', group: 'world' },
-  { code: 'in', cc: 'IN', domain: 'amazon.in', group: 'world' },
-  { code: 'ae', cc: 'AE', domain: 'amazon.ae', group: 'world' },
-  { code: 'sa', cc: 'SA', domain: 'amazon.sa', group: 'world' },
-  { code: 'sg', cc: 'SG', domain: 'amazon.sg', group: 'world' },
-  { code: 'com.tr', cc: 'TR', domain: 'amazon.com.tr', group: 'world' },
 ];
 const CODES = MARKETS.map((m) => m.code);
 const CURRENCY: Record<string, string> = {

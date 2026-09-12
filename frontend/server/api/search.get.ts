@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
       .filter((p: string[]) => p.length === 2 && p[0] && p[1]));
   const mpKey = marketplace === 'at' || marketplace === 'ch' ? 'de'
     : marketplace === 'co.uk' ? 'uk' : marketplace;
-  const tag = tagMap[mpKey] || config.public.affiliateTag || '';
+  const tag = tagMap[mpKey] || '';
 
   try {
     const backend = await $fetch(`${config.backendUrl}/search`, {

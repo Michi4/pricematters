@@ -71,15 +71,13 @@ TAG_ENVS = {
 
 
 def tag_for(marketplace: str) -> str:
-    """Partner ID for a marketplace, or '' when we have no program there."""
+    """Partner ID for a marketplace, or '' when we have no program there.
+
+    Only locales with their own program ID are tagged — a foreign tag earns
+    nothing, so those links stay plain until the ID lands."""
     import os
     env = TAG_ENVS.get(marketplace)
-    if env and os.getenv(env):
-        return os.getenv(env)
-    # legacy single-tag fallback, only for locales that have a program slot
-    if env:
-        return os.getenv("AMAZON_PARTNER_TAG", "")
-    return ""
+    return os.getenv(env, "") if env else ""
 
 
 def awin_deeplink(merchant_url: str, advertiser_id: str, publisher_id: str) -> str:
