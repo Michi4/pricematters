@@ -15,7 +15,7 @@ import time
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from affiliate import monetize, affiliate_url, tag_for  # Partner IDs via affiliate.TAG_ENVS env vars
+from affiliate import monetize, affiliate_url, tag_for  # Partner IDs via affiliate.PROGRAMS (DB, env fallback)
 from extractor import extract_quantity, unit_price
 from providers import PROVIDERS
 from translate import query_variants
@@ -225,6 +225,47 @@ class Ack(BaseModel):
     ack: bool
 
 
+class AffTag(BaseModel):
+    code: str = ""
+    tag: str = ""
+
+
+@app.get("/admin/affiliate")
+def admin_affiliate(request: Request):
+    """Admin-only: all EU programs with console links + current Partner IDs."""
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    from affiliate import program_tags
+    return {"programs": program_tags()}
+
+
+@app.put("/admin/affiliate")
+def admin_affiliate_put(body: AffTag, request: Request):
+    """Admin-only: set/override a program's Partner ID (empty clears to env)."""
+    if not _admin_ok(request):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    from affiliate import PROGRAM_CODES, invalidate_tags, program_tags
+    code = (body.code or "").strip().lower()
+    tag = (body.tag or "").strip()[:64]
+    if code not in PROGRAM_CODES:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "unknown program"})
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return JSONResponse(status_code=503, content={"ok": False, "error": "no database"})
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+            cur.execute("""INSERT INTO settings (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+                        (f"tag_{code}", tag))
+        invalidate_tags()
+        return {"ok": True, "programs": program_tags()}
+    except Exception as e:
+        print(f"[affiliate] save failed: {e}", flush=True)
+        return JSONResponse(status_code=500, content={"ok": False, "error": "internal"})
+
+
 @app.patch("/inquiries/{inq_id}")
 def ack_inquiry(inq_id: int, body: Ack, request: Request):
     """Admin-only: mark an inquiry as resolved/read (or un-mark)."""
@@ -299,17 +340,19 @@ def _effective_chain() -> list:
     """Runtime provider chain precedence: an explicit DATA_PROVIDER pin always
     wins; DATA_PROVIDERS (if set) becomes its fallback tail; DEFAULT_CHAIN is
     the last resort. Previously the env chain silently overrode the pin, so a
-    pinned provider never actually received traffic."""
+    pinned provider never actually received traffic.
+    Unknown names are ignored (a typo must not take the site down) and mock
+    stays out of the chain — /search serves it via mock-fallback instead."""
     from providers import DEFAULT_CHAIN as _dc, PROVIDERS
     pinned = os.getenv("DATA_PROVIDER", "").strip()
     env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
-    if pinned:
+    if pinned in PROVIDERS and pinned != "mock":
         chain = [pinned] + [p for p in env_chain if p != pinned]
     elif env_chain:
         chain = env_chain
     else:
         chain = list(_dc)
-    return [c for c in chain if c in PROVIDERS]
+    return [c for c in chain if c in PROVIDERS and c != "mock"]
 
 
 @app.get("/search")

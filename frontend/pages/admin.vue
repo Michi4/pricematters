@@ -235,6 +235,23 @@
         </section>
 
         <section class="panel">
+          <h2>Amazon affiliate</h2>
+          <p v-if="!aff.length" class="mut small">Could not load programs.</p>
+          <table v-else>
+            <thead><tr><th>Program</th><th>Partner ID</th><th class="num"></th></tr></thead>
+            <tbody>
+              <tr v-for="p in aff" :key="p.code">
+                <td><a :href="p.console" target="_blank" rel="noopener">{{ p.name }}</a>
+                  <span v-if="p.tag" class="pillok">earning</span><span v-else class="pillwarn">pending ID</span></td>
+                <td><input v-model="affEdits[p.code]" class="tfilter tid" :placeholder="p.source === 'env' ? 'from env' : '—'" /></td>
+                <td class="num"><button class="pgbtn" @click="saveAff(p.code)">save</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="affMsg" class="mut small">{{ affMsg }}</p>
+        </section>
+
+        <section class="panel">
           <h2>Ad inquiries <input v-model="finq" class="tfilter" placeholder="filter…" /></h2>
           <p v-if="!(data.adInquiries || []).length" class="mut small">No inquiries yet.</p>
           <div v-for="(inq, ix) in fInq" :key="inq[0]" class="inq" :class="{ acked: inq[6] }" @click="openInq = openInq === ix ? -1 : ix">
@@ -433,6 +450,39 @@ function setAck(inq: any[], ack: boolean) {
 }
 
 let timer: any = null;
+// Amazon affiliate programs + editable Partner IDs (loaded once on unlock,
+// never on the 60s auto-refresh so in-progress edits are not wiped)
+const aff = ref<any[]>([]);
+const affEdits = ref<Record<string, string>>({});
+const affMsg = ref('');
+async function loadAff() {
+  try {
+    const res = await $fetch('/api/admin/affiliate', {
+      headers: { 'x-admin-key': key.value },
+    }) as any;
+    aff.value = res?.programs || [];
+    const e: Record<string, string> = {};
+    for (const p of aff.value) e[p.code] = p.tag || '';
+    affEdits.value = e;
+  } catch { aff.value = []; }
+}
+async function saveAff(code: string) {
+  affMsg.value = '';
+  try {
+    const res = await $fetch('/api/admin/affiliate', {
+      method: 'PUT',
+      body: { code, tag: affEdits.value[code] || '' },
+      headers: { 'x-admin-key': key.value },
+    }) as any;
+    if (res?.ok) {
+      aff.value = res.programs || aff.value;
+      const e = { ...affEdits.value };
+      for (const p of aff.value) e[p.code] = p.tag || '';
+      affEdits.value = e;
+      affMsg.value = 'Saved — live for new searches within a minute.';
+    } else affMsg.value = 'Save failed.';
+  } catch { affMsg.value = 'Save failed.'; }
+}
 async function load() {
   try {
     const res = await $fetch('/api/admin/stats', {
@@ -456,8 +506,8 @@ async function load() {
     unlocked.value = true;
   }
 }
-function unlock() { if (key.value.trim()) load(); }
-function reload() { load(); }
+function unlock() { if (key.value.trim()) { load(); loadAff(); } }
+function reload() { load(); loadAff(); }
 function lock() {
   key.value = '';
   data.value = null;
@@ -564,6 +614,9 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (delTimer) clearTimeout(
 .adm .pill { display: inline-block; border: 1px solid #d5e2d7; border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; margin: 0.1rem 0.15rem 0.1rem 0; }
 .adm.dark .pill { border-color: #2a3b2f; }
 .adm .pill.first { border-color: #12813c; color: #12813c; font-weight: 700; }
+.adm .pillok { display: inline-block; border: 1px solid #12813c; color: #12813c; border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; margin-left: 0.4rem; }
+.adm .pillwarn { display: inline-block; border: 1px solid #b97f00; color: #b97f00; border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; margin-left: 0.4rem; }
+.adm .tid { width: 100%; max-width: 16rem; font-family: monospace; }
 .adm.dark .pill.first { border-color: #4ade80; color: #4ade80; }
 .adm .dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-right: 0.45rem; }
 .adm .dot.ok { background: #22c55e; }

@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       .map((p: string) => p.split(':').map((s: string) => s.trim()))
       .filter((p: string[]) => p.length === 2 && p[0] && p[1]));
   const mpKey = marketplace === 'at' || marketplace === 'ch' ? 'de'
-    : marketplace === 'co.uk' ? 'uk' : marketplace;
+    : marketplace === 'co.uk' ? 'uk' : marketplace === 'com' ? 'us' : marketplace;
   const tag = tagMap[mpKey] || '';
 
   try {

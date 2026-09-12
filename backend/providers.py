@@ -538,14 +538,15 @@ DEFAULT_CHAIN = ["zenrows", "serpapi", "scrapingbee", "rainforest", "selfscrape"
 
 def _effective_chain_env() -> str:
     """The chain /search would actually use right now (same precedence as
-    main._effective_chain) — what the admin System panel displays."""
+    main._effective_chain) — what the admin System panel displays.
+    Unknown names are ignored and mock stays out (served via fallback)."""
     pinned = os.getenv("DATA_PROVIDER", "").strip()
     env_chain = [p.strip() for p in os.getenv("DATA_PROVIDERS", "").split(",") if p.strip()]
-    if pinned:
+    if pinned in PROVIDERS and pinned != "mock":
         chain = [pinned] + [p for p in env_chain if p != pinned]
     elif env_chain:
         chain = env_chain
     else:
         chain = list(DEFAULT_CHAIN)
-    known = [c for c in chain if c in PROVIDERS]
+    known = [c for c in chain if c in PROVIDERS and c != "mock"]
     return ",".join(known)

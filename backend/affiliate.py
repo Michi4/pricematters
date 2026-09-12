@@ -61,13 +61,85 @@ def affiliate_url(url_or_asin: str, tag: str, marketplace: str = "de") -> str:
     return urlunparse((parts.scheme, parts.netloc or domain, parts.path, "", urlencode(q), ""))
 
 
-# PartnerNet IDs are per EU program (one signup each, no re-entry).
-# DACH shares the .de ID — Austria & Switzerland shop on amazon.de.
+# Marketplace code -> program env var (kept for reference; resolution goes
+# through PROGRAMS/tag_for so /admin edits apply).
 TAG_ENVS = {
     "de": "AMAZON_TAG_DE", "at": "AMAZON_TAG_DE", "ch": "AMAZON_TAG_DE",
     "co.uk": "AMAZON_TAG_UK", "fr": "AMAZON_TAG_FR",
     "es": "AMAZON_TAG_ES", "it": "AMAZON_TAG_IT",
 }
+
+# Every EU Associates/PartnerNet program we can join, with its console URL.
+# code = short settings key suffix; locales = backend marketplace codes covered.
+PROGRAMS = [
+    {"code": "de", "name": "Amazon.de PartnerNet", "console": "https://partnernet.amazon.de/",
+     "env": "AMAZON_TAG_DE", "locales": ["de", "at", "ch"]},
+    {"code": "es", "name": "Afiliados Amazon.es", "console": "https://afiliados.amazon.es/",
+     "env": "AMAZON_TAG_ES", "locales": ["es"]},
+    {"code": "uk", "name": "Amazon.co.uk Associates", "console": "https://affiliate-program.amazon.co.uk/",
+     "env": "AMAZON_TAG_UK", "locales": ["co.uk"]},
+    {"code": "fr", "name": "Club Partenaires Amazon", "console": "https://partenaires.amazon.fr/",
+     "env": "AMAZON_TAG_FR", "locales": ["fr"]},
+    {"code": "it", "name": "Programma Affiliazione Amazon.it", "console": "https://programma-affiliazione.amazon.it/",
+     "env": "AMAZON_TAG_IT", "locales": ["it"]},
+    {"code": "us", "name": "Amazon.com Associates", "console": "https://affiliate-program.amazon.com/",
+     "env": "AMAZON_TAG_US", "locales": ["com"]},
+]
+PROGRAM_CODES = {p["code"] for p in PROGRAMS}
+
+_SETTINGS_DDL = "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
+_TAGS_CACHE: dict = {"at": 0.0, "tags": {}}
+_TAGS_TTL = 60.0
+
+
+def _db_tags() -> dict:
+    """Owner-edited IDs from the settings table (edited in /admin)."""
+    import os
+    try:
+        import psycopg
+        url = os.getenv("DATABASE_URL", "")
+        if not url:
+            return {}
+        with psycopg.connect(url, connect_timeout=3) as conn, conn.cursor() as cur:
+            cur.execute(_SETTINGS_DDL)
+            cur.execute("SELECT key, value FROM settings WHERE key LIKE 'tag\\_%'")
+            return {k[4:]: (v or "") for k, v in cur.fetchall() if k.startswith("tag_")}
+    except Exception:
+        return {}
+
+
+def get_tags() -> dict:
+    """Resolved Partner ID per program code: settings table first, env fallback.
+    Cached 60s (tag_for runs per result row); invalidate_tags() on admin edit."""
+    import os
+    import time
+    now = time.time()
+    if now - _TAGS_CACHE["at"] < _TAGS_TTL:
+        return _TAGS_CACHE["tags"]
+    tags = _db_tags()
+    for p in PROGRAMS:
+        tags.setdefault(p["code"], os.getenv(p["env"], ""))
+    _TAGS_CACHE.update(at=now, tags=tags)
+    return tags
+
+
+def invalidate_tags() -> None:
+    _TAGS_CACHE["at"] = 0.0
+
+
+def program_tags() -> list:
+    """Full program list with resolved ID + source for the /admin panel."""
+    import os
+    db = _db_tags()
+    out = []
+    for p in PROGRAMS:
+        if p["code"] in db and db[p["code"]]:
+            out.append({**p, "tag": db[p["code"]], "source": "admin"})
+        elif os.getenv(p["env"], ""):
+            out.append({**p, "tag": os.getenv(p["env"], ""), "source": "env"})
+        else:
+            out.append({**p, "tag": "", "source": ""})
+    return out
 
 
 def tag_for(marketplace: str) -> str:
@@ -75,9 +147,10 @@ def tag_for(marketplace: str) -> str:
 
     Only locales with their own program ID are tagged — a foreign tag earns
     nothing, so those links stay plain until the ID lands."""
-    import os
-    env = TAG_ENVS.get(marketplace)
-    return os.getenv(env, "") if env else ""
+    for p in PROGRAMS:
+        if marketplace in p["locales"]:
+            return get_tags().get(p["code"], "")
+    return ""
 
 
 def awin_deeplink(merchant_url: str, advertiser_id: str, publisher_id: str) -> str:

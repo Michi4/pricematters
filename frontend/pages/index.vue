@@ -579,6 +579,8 @@ const MARKETS = [
   { code: 'at', cc: 'AT', domain: 'amazon.de', group: 'eu' },
   { code: 'ch', cc: 'CH', domain: 'amazon.de', group: 'eu' },
   { code: 'es', cc: 'ES', domain: 'amazon.es', group: 'eu' },
+  { code: 'fr', cc: 'FR', domain: 'amazon.fr', group: 'eu' },
+  { code: 'com', cc: 'US', domain: 'amazon.com', group: 'world' },
 ];
 const CODES = MARKETS.map((m) => m.code);
 const CURRENCY: Record<string, string> = {
