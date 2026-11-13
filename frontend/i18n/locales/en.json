@@ -21,7 +21,7 @@
     "pageOf": "Page {p} of {n}",
     "perPage": "per page",
     "alsoSearched": "Also searched:",
-    "demo": "Demo data – live prices kick in once a data key is configured.",
+    "demo": "Demo data – live prices are temporarily unavailable.",
     "empty": "Nothing found. Try another term.",
     "rateLimited": "You're searching a bit too fast – take a short break. Try again in {s} seconds.",
     "best": "Best deal",

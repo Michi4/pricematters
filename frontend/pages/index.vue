@@ -739,7 +739,15 @@ const filtersActive = computed(() =>
 
 // ---- SEO (SSR, per brand + locale) ----
 const url = useRequestURL();
-const canonical = computed(() => `https://${config.public.canonicalHost}${url.pathname}`);
+const canonicalBase = `https://${config.public.canonicalHost}`;
+// /en and /en/ must not become two canonicals for the same page
+const canonicalPath = url.pathname.replace(/\/+$/, '') || '/';
+const canonical = computed(() => `${canonicalBase}${canonicalPath}`);
+// The /en prefix is a real language version: it must not inherit the German
+// <html lang> from nuxt.config, and it needs a reciprocal hreflang cluster or
+// Google files it as a duplicate of the German page ("crawled, not indexed").
+const htmlLang = computed(() => (locale.value === 'en' ? 'en' : 'de-AT'));
+const localeHome = (code: string) => (code === 'de' ? '/' : `/${code}`);
 const pageTitle = computed(() => locale.value === 'de'
   ? `${brand.value?.name} – Grundpreise vergleichen (€/kg, €/l, €/Stück)`
   : `${brand.value?.name} – Compare unit prices (€/kg, €/L, €/pc)`);
@@ -747,6 +755,10 @@ const pageDesc = computed(() => plainSlogan(slogans.value[0] || ''));
 useSeoMeta({
   title: () => pageTitle.value,
   description: () => pageDesc.value,
+  // homelab mirror (*.home.websters.at) must stay out of the index: it serves
+  // the same content as production under a second hostname
+  robots: () => (host.endsWith('.home.websters.at') ? 'noindex, nofollow' : 'index, follow'),
+  ogLocale: () => (locale.value === 'en' ? 'en_US' : 'de_AT'),
   ogTitle: () => pageTitle.value,
   ogDescription: () => pageDesc.value,
   ogUrl: () => canonical.value,
@@ -756,7 +768,13 @@ useSeoMeta({
   twitterImage: () => `https://${config.public.canonicalHost}/og.png`,
 });
 useHead({
-  link: [{ rel: 'canonical', href: () => canonical.value }],
+  htmlAttrs: { lang: () => htmlLang.value },
+  link: [
+    { rel: 'canonical', href: () => canonical.value },
+    { rel: 'alternate', hreflang: 'de-AT', href: `${canonicalBase}${localeHome('de')}` },
+    { rel: 'alternate', hreflang: 'en', href: `${canonicalBase}${localeHome('en')}` },
+    { rel: 'alternate', hreflang: 'x-default', href: `${canonicalBase}${localeHome('de')}` },
+  ],
   script: [
     // theme BEFORE first paint: onMounted runs after SSR HTML shows, which
     // flashes white for dark-mode users. This blocking head script sets the

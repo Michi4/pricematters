@@ -11,6 +11,10 @@ export default defineEventHandler((event) => {
   if (!host) return;
   // local dev / docker-internal traffic never redirects
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('192.168.') || host.startsWith('10.') || host === 'backend' || host === 'frontend') return;
+  // homelab mirror (*.home.websters.at, e.g. pricematters.home.websters.at)
+  // is served as-is: it is an internal preview host, not a public alias
+  // domain, so redirecting it to production would defeat its purpose.
+  if (host === 'home.websters.at' || host.endsWith('.home.websters.at')) return;
   const canonical = (useRuntimeConfig().public.canonicalHost || 'pricematters.websters.at').toLowerCase();
   if (host === canonical) return;
   const url = getRequestURL(event);

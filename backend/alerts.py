@@ -49,7 +49,7 @@ def emit(kind: str, text: str, severity: str = "warn", cooldown_s: int = 21600):
                            "severity": severity, "text": text})
         rk = f"{PFX}:alerts"
         r.rpush(rk, item)
-        r.ltrim(rk, -100)  # cap the backlog
+        r.ltrim(rk, -100, -1)  # cap the backlog
         r.expire(rk, 604800)  # a week unread = nobody is polling; drop it
         print(f"[alert] {kind}: {text}", flush=True)
     except Exception as e:
