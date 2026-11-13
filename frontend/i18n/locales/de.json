@@ -21,7 +21,7 @@
     "pageOf": "Seite {p} von {n}",
     "perPage": "pro Seite",
     "alsoSearched": "Auch gesucht:",
-    "demo": "Demo-Daten – echte Live-Preise kommen, sobald ein Daten-Key hinterlegt ist.",
+    "demo": "Demo-Daten – Live-Preise sind gerade nicht abrufbar.",
     "empty": "Nichts gefunden. Versuch es mit einem anderen Begriff.",
     "rateLimited": "Du suchst gerade etwas zu schnell – kurze Pause, dann geht's weiter. Versuch es in {s} Sekunden wieder.",
     "best": "Bester Deal",
